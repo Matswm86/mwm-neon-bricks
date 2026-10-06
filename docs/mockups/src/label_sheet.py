@@ -1,4 +1,5 @@
 """Crop the element render and add labels. python3 label_sheet.py <raw.png> <labels.json> <out.png>"""
+
 import json
 import sys
 from pathlib import Path
@@ -7,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 FONT = str(Path(__file__).resolve().parents[3] / "assets/fonts/Fredoka.ttf")
 raw = Image.open(sys.argv[1]).convert("RGB")
-labels = json.load(open(sys.argv[2]))
+labels = json.loads(Path(sys.argv[2]).read_text())
 x0, y0, x1, y1 = 40, 300, 1800, 1480
 im = raw.crop((x0, y0, x1, y1))
 d = ImageDraw.Draw(im)
