@@ -154,6 +154,19 @@ static func draw_icon(ci: CanvasItem, name: String, c: Vector2, s: float, col: C
 		"close":
 			ci.draw_line(c + Vector2(-0.5, -0.5) * s, c + Vector2(0.5, 0.5) * s, col, s * 0.2, true)
 			ci.draw_line(c + Vector2(0.5, -0.5) * s, c + Vector2(-0.5, 0.5) * s, col, s * 0.2, true)
+		"music":
+			# Two beamed eighth notes.
+			var w: float = s * 0.14
+			for hx: float in [-0.45, 0.45]:
+				var head: Vector2 = c + Vector2(hx, 0.55) * s
+				ci.draw_set_transform(head, -0.35, Vector2(1.3, 1.0))
+				ci.draw_circle(Vector2.ZERO, s * 0.24, col)
+				ci.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+				var top: Vector2 = c + Vector2(hx + 0.26, -0.75) * s
+				ci.draw_line(head + Vector2(0.26 * s, 0.0), top, col, w, true)
+			ci.draw_line(
+				c + Vector2(-0.19, -0.75) * s, c + Vector2(0.71, -0.75) * s, col, s * 0.24, true
+			)
 
 
 ## Five-point star polygon.

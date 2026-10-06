@@ -16,6 +16,7 @@ var screen: String = ""
 
 var world: NbWorld
 var sfx: NbSfx
+var music: NbMusic
 var ui: CanvasLayer
 var screen_root: Control
 var field_frame: Control
@@ -31,6 +32,9 @@ func _ready() -> void:
 	add_child(world)
 	sfx = NbSfx.new()
 	add_child(sfx)
+	music = NbMusic.new()
+	add_child(music)
+	sfx.stinger_started.connect(music.duck)
 	ui = CanvasLayer.new()
 	ui.layer = 10
 	add_child(ui)
@@ -48,6 +52,7 @@ func _ready() -> void:
 	add_child(play)
 	play.setup(world, sfx, field_frame, center_frame, screen_root)
 	play.map_requested.connect(open_map)
+	play.level_started.connect(music.play_level)
 	settings = NbSettings.new()
 	center_frame.add_child(settings)
 	settings.closed.connect(func() -> void: settings.visible = false)
@@ -77,6 +82,7 @@ func _frame() -> Control:
 
 func _apply_settings() -> void:
 	sfx.enabled = NeonBricks.sfx_on or NeonBricks.in_shell()
+	music.set_enabled(NeonBricks.music_on)
 	world.set_less_motion(NeonBricks.less_motion)
 	var shell: bool = NeonBricks.in_shell()
 	home.visible = screen == "play" and not shell
@@ -131,6 +137,7 @@ func open_map() -> void:
 	play.stop()
 	world.show_gameplay(false)
 	world.start_intro()
+	music.play_map()
 	map.refresh()
 	map.visible = true
 	settings.visible = false

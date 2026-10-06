@@ -6,6 +6,7 @@ extends Node
 ## flash limiter, runs slow-mo on the last brick and shows the win card.
 
 signal map_requested
+signal level_started(id: int)
 
 ## Test hooks (capture bot / headless tests only).
 var autopilot: bool = false
@@ -72,6 +73,7 @@ func setup(
 
 func start_level(id: int) -> void:
 	level_id = id
+	level_started.emit(id)
 	sim = NbSim.new()
 	sim.rng.randomize()
 	sim.setup(NbLevels.get_level(id), NeonBricks.easy, force_charged_net)

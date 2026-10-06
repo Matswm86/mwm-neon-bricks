@@ -2,7 +2,7 @@ class_name NbSettings
 extends Control
 
 ## Stand-alone settings panel (GDD 10.2), adult-facing, opened from the map
-## gear: Lett / Vanlig, sound, "Mindre bevegelse". Fredoka (SIL OFL), ink on
+## gear: Lett / Vanlig, sound, music (note icon), "Mindre bevegelse". Fredoka (SIL OFL), ink on
 ## card. Difficulty takes effect from the next level start.
 
 signal closed
@@ -13,11 +13,13 @@ const INK := Color(0.141, 0.129, 0.114)
 const ON := Color(1.0, 0.541, 0.239)
 const OFF := Color(1.0, 1.0, 1.0)
 const DIM := Color(0.0, 0.0, 0.0, 0.55)
-const PANEL := Rect2(90, 470, 900, 980)
+const PANEL := Rect2(90, 400, 900, 1120)
+const MUSIC_ICON_AT := Vector2(205, 1110)
 
 var _lett: Button
 var _vanlig: Button
 var _sound: Button
+var _music: Button
 var _motion: Button
 
 
@@ -28,7 +30,7 @@ func _ready() -> void:
 	th.default_font = load("res://assets/fonts/Fredoka.ttf")
 	th.default_font_size = 44
 	theme = th
-	_heading("Innstillinger", Vector2(150, 520))
+	_heading("Innstillinger", Vector2(150, 450))
 	var close := NbDisc.new()
 	close.icon = "close"
 	close.disc_radius = 60.0
@@ -36,20 +38,27 @@ func _ready() -> void:
 	close.position = Vector2(PANEL.end.x - 170, PANEL.position.y + 10)
 	close.tapped.connect(func() -> void: closed.emit())
 	add_child(close)
-	_label("Vanskelighet", Vector2(150, 690))
-	_lett = _button("Lett", Rect2(150, 760, 360, 140))
-	_vanlig = _button("Vanlig", Rect2(570, 760, 360, 140))
+	_label("Vanskelighet", Vector2(150, 610))
+	_lett = _button("Lett", Rect2(150, 680, 360, 140))
+	_vanlig = _button("Vanlig", Rect2(570, 680, 360, 140))
 	_lett.pressed.connect(func() -> void: _set_easy(true))
 	_vanlig.pressed.connect(func() -> void: _set_easy(false))
-	_label("Lyd", Vector2(150, 980))
-	_sound = _button("", Rect2(570, 950, 360, 140))
+	_label("Lyd", Vector2(150, 900))
+	_sound = _button("", Rect2(570, 870, 360, 140))
 	_sound.pressed.connect(
 		func() -> void:
 			NeonBricks.set_sfx_on(not NeonBricks.sfx_on)
 			refresh()
 	)
-	_label("Mindre bevegelse", Vector2(150, 1170))
-	_motion = _button("", Rect2(570, 1140, 360, 140))
+	# Music row: a note icon instead of a word (drawn in _draw).
+	_music = _button("", Rect2(570, 1040, 360, 140))
+	_music.pressed.connect(
+		func() -> void:
+			NeonBricks.set_music_on(not NeonBricks.music_on)
+			refresh()
+	)
+	_label("Mindre bevegelse", Vector2(150, 1240))
+	_motion = _button("", Rect2(570, 1210, 360, 140))
 	_motion.pressed.connect(
 		func() -> void:
 			NeonBricks.set_less_motion(not NeonBricks.less_motion)
@@ -59,7 +68,7 @@ func _ready() -> void:
 	note.text = "Vanskelighet gjelder fra neste bane."
 	note.add_theme_font_size_override("font_size", 40)
 	note.add_theme_color_override("font_color", INK)
-	note.position = Vector2(150, 1330)
+	note.position = Vector2(150, 1400)
 	add_child(note)
 	visible = false
 
@@ -74,6 +83,8 @@ func refresh() -> void:
 	_style(_vanlig, not NeonBricks.easy)
 	_sound.text = "På" if NeonBricks.sfx_on else "Av"
 	_style(_sound, NeonBricks.sfx_on)
+	_music.text = "På" if NeonBricks.music_on else "Av"
+	_style(_music, NeonBricks.music_on)
 	_motion.text = "På" if NeonBricks.less_motion else "Av"
 	_style(_motion, NeonBricks.less_motion)
 
@@ -134,3 +145,4 @@ func _draw() -> void:
 	sb.set_corner_radius_all(56)
 	sb.anti_aliasing = true
 	draw_style_box(sb, PANEL)
+	NbDisc.draw_icon(self, "music", MUSIC_ICON_AT, 56.0, INK)

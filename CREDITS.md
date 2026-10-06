@@ -8,6 +8,12 @@
 
 No third-party textures, HDRIs or models are used yet. Planned free sources, to be listed here with the exact file when added: Poly Haven (CC0), ambientCG (CC0), Kenney (CC0).
 
+## Sound
+| Asset | Source | Licence |
+|---|---|---|
+| Sound effects in `assets/sfx/` | Own synthesis (`tools/render_sfx.py`), layered with samples from Kenney Impact Sounds (https://kenney.nl/assets/impact-sounds): `impactGlass_light_000-002`, `impactGlass_medium_000-002`, `impactMetal_light_000-001` | Own work; Kenney samples CC0 |
+| Background music `assets/music/neon_bricks_theme.ogg` | Supplied by the game owner | Used with the owner's permission |
+
 ## Fonts
 | Font | Use | Licence |
 |---|---|---|

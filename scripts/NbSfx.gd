@@ -1,122 +1,86 @@
 class_name NbSfx
 extends Node
 
-## Small synthesised sound set (GDD 9): no audio files, generated once at
-## start as 16-bit mono WAV streams. Pool of players on the "Master" bus
-## (MWM Play routes streams without a file path to its Sfx bus).
+## Sound effects (GDD 9): pre-rendered .ogg files in res://assets/sfx/, made
+## by tools/render_sfx.py (own synthesis plus Kenney CC0 layers, see
+## CREDITS.md). One fixed pool of players, no allocation per hit. Each play
+## picks a random variant and a small random pitch shift so repeated hits do
+## not tire the ear. Players stay on the "Master" bus (MWM Play routes streams
+## outside a "music" path to its Sfx bus).
 
-const RATE: int = 22050
-const POOL: int = 8
+## Emitted when the win stinger starts, with its length in seconds, so the
+## music can duck under it.
+signal stinger_started(seconds: float)
+
+const POOL: int = 12
+const DIR := "res://assets/sfx/"
 ## Pentatonic steps for brick breaks (one step up per brick since the last
 ## paddle touch).
 const PENTA: Array[float] = [1.0, 1.125, 1.25, 1.5, 1.667, 2.0, 2.25, 2.5, 3.0]
+## Call-site name -> files (variants) and the random pitch spread (+- share).
+const SOUNDS: Dictionary = {
+	"bop": [["nb_bop_1", "nb_bop_2", "nb_bop_3"], 0.03],
+	"tink": [["nb_tink_1", "nb_tink_2", "nb_tink_3"], 0.04],
+	"note": [["nb_chime"], 0.0],
+	"shatter": [["nb_shatter_1", "nb_shatter_2", "nb_shatter_3"], 0.08],
+	"ting": [["nb_ting_1", "nb_ting_2"], 0.03],
+	"tick": [["nb_tick_1", "nb_tick_2", "nb_tick_3"], 0.06],
+	"bwomm": [["nb_bwomm"], 0.04],
+	"hum": [["nb_hum"], 0.05],
+	"zip": [["nb_zip"], 0.06],
+	"whoosh": [["nb_whoosh"], 0.0],
+	"arp": [["nb_komet"], 0.0],
+	"win": [["nb_win"], 0.0],
+}
+const SHATTER_DB: float = -5.0
+const WIN_DUCK_S: float = 3.0
 
 var enabled: bool = true
 var _streams: Dictionary = {}
+var _spread: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
 var _next: int = 0
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	_rng.randomize()
 	for i: int in POOL:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
-	_streams["bop"] = _tone(330.0, 330.0, 0.09, "sine", 0.5)
-	_streams["tink"] = _tone(1760.0, 1760.0, 0.12, "bell", 0.35)
-	_streams["note"] = _tone(523.25, 523.25, 0.28, "tri", 0.45)
-	_streams["ting"] = _tone(1230.0, 1230.0, 0.22, "metal", 0.35)
-	_streams["tick"] = _tone(900.0, 700.0, 0.035, "sine", 0.25)
-	_streams["bwomm"] = _tone(130.0, 90.0, 0.38, "sine", 0.6)
-	_streams["hum"] = _tone(220.0, 330.0, 0.07, "sine", 0.25)
-	_streams["zip"] = _tone(600.0, 1400.0, 0.12, "tri", 0.25)
-	_streams["whoosh"] = _noise(0.55, 0.35)
-	_streams["arp"] = _arp([523.25, 659.25, 783.99, 1046.5], 0.1, 0.4)
-	_streams["win"] = _arp(
-		[523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5, 1568.0], 0.22, 0.45
-	)
+	for key: String in SOUNDS:
+		var entry: Array = SOUNDS[key]
+		var list: Array[AudioStream] = []
+		for file: String in entry[0]:
+			var s: AudioStream = load(DIR + file + ".ogg") as AudioStream
+			if s != null:
+				list.append(s)
+			else:
+				push_warning("NbSfx: missing " + file)
+		_streams[key] = list
+		_spread[key] = float(entry[1])
 
 
 func play(name: String, pitch: float = 1.0, vol_db: float = 0.0) -> void:
 	if not enabled or not _streams.has(name):
 		return
+	var list: Array[AudioStream] = _streams[name]
+	if list.is_empty():
+		return
+	var spread: float = _spread[name]
 	var p: AudioStreamPlayer = _players[_next]
 	_next = (_next + 1) % _players.size()
-	p.stream = _streams[name]
-	p.pitch_scale = clampf(pitch, 0.25, 4.0)
+	p.stream = list[_rng.randi() % list.size()]
+	p.pitch_scale = clampf(pitch * (1.0 + _rng.randf_range(-spread, spread)), 0.25, 4.0)
 	p.volume_db = vol_db
 	p.play()
+	if name == "win":
+		stinger_started.emit(WIN_DUCK_S)
 
 
+## Brick break: a glass chime on the rising pentatonic ladder plus a glass
+## shatter layer.
 func note(step: int) -> void:
 	play("note", PENTA[clampi(step, 0, PENTA.size() - 1)])
-
-
-func _wav(samples: PackedFloat32Array) -> AudioStreamWAV:
-	var data := PackedByteArray()
-	data.resize(samples.size() * 2)
-	for i: int in samples.size():
-		data.encode_s16(i * 2, int(clampf(samples[i], -1.0, 1.0) * 32000.0))
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = RATE
-	w.stereo = false
-	w.data = data
-	return w
-
-
-func _tone(f0: float, f1: float, dur: float, kind: String, amp: float) -> AudioStreamWAV:
-	var n: int = int(dur * RATE)
-	var s := PackedFloat32Array()
-	s.resize(n)
-	var ph: float = 0.0
-	for i: int in n:
-		var t: float = float(i) / float(n)
-		var f: float = lerpf(f0, f1, t)
-		ph += f / RATE
-		var env: float = minf(1.0, t * 40.0) * pow(1.0 - t, 2.0)
-		var v: float = 0.0
-		match kind:
-			"tri":
-				v = 1.0 - 4.0 * absf(fposmod(ph, 1.0) - 0.5)
-			"bell":
-				v = sin(TAU * ph) * 0.7 + sin(TAU * ph * 2.76) * 0.3
-			"metal":
-				v = sin(TAU * ph) * 0.5 + sin(TAU * ph * 2.58) * 0.3 + sin(TAU * ph * 4.1) * 0.2
-			_:
-				v = sin(TAU * ph)
-		s[i] = v * env * amp
-	return _wav(s)
-
-
-func _noise(dur: float, amp: float) -> AudioStreamWAV:
-	var n: int = int(dur * RATE)
-	var s := PackedFloat32Array()
-	s.resize(n)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 5
-	var lp: float = 0.0
-	for i: int in n:
-		var t: float = float(i) / float(n)
-		var cut: float = lerpf(0.03, 0.25, sin(t * PI))
-		lp += (rng.randf_range(-1.0, 1.0) - lp) * cut
-		s[i] = lp * sin(t * PI) * amp * 2.0
-	return _wav(s)
-
-
-func _arp(freqs: Array, step_s: float, amp: float) -> AudioStreamWAV:
-	var n: int = int((step_s * freqs.size() + 0.25) * RATE)
-	var s := PackedFloat32Array()
-	s.resize(n)
-	for k: int in freqs.size():
-		var start: int = int(k * step_s * RATE)
-		var len_n: int = int(0.3 * RATE)
-		var f: float = float(freqs[k])
-		for i: int in len_n:
-			var j: int = start + i
-			if j >= n:
-				break
-			var t: float = float(i) / float(len_n)
-			var v: float = 1.0 - 4.0 * absf(fposmod(f * float(i) / RATE, 1.0) - 0.5)
-			s[j] += v * minf(1.0, t * 50.0) * pow(1.0 - t, 2.0) * amp * 0.6
-	return _wav(s)
+	play("shatter", 1.0, SHATTER_DB)
