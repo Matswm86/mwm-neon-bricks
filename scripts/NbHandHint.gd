@@ -11,6 +11,7 @@ const SIZE_PX: float = 180.0
 var base: Vector2 = Vector2(540.0, 1520.0)
 var swing_px: float = 220.0
 var _t: float = 0.0
+var _boxes: Dictionary = {}
 
 
 func _ready() -> void:
@@ -52,8 +53,12 @@ func _draw() -> void:
 
 
 func _round_rect(r: Rect2, rad: float, col: Color) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.set_corner_radius_all(int(rad))
-	sb.anti_aliasing = true
+	var key := "%d_%s" % [int(rad), col.to_html()]
+	var sb: StyleBoxFlat = _boxes.get(key)
+	if sb == null:
+		sb = StyleBoxFlat.new()
+		sb.bg_color = col
+		sb.set_corner_radius_all(int(rad))
+		sb.anti_aliasing = true
+		_boxes[key] = sb
 	draw_style_box(sb, r)

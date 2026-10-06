@@ -1,10 +1,11 @@
 """Crop the element render and add labels. python3 label_sheet.py <raw.png> <labels.json> <out.png>"""
 import json
 import sys
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = "/home/mm/MWM/projects/mwm-play/assets/fonts/Fredoka.ttf"
+FONT = str(Path(__file__).resolve().parents[3] / "assets/fonts/Fredoka.ttf")
 raw = Image.open(sys.argv[1]).convert("RGB")
 labels = json.load(open(sys.argv[2]))
 x0, y0, x1, y1 = 40, 300, 1800, 1480

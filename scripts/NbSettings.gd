@@ -57,7 +57,7 @@ func _ready() -> void:
 	)
 	var note := Label.new()
 	note.text = "Vanskelighet gjelder fra neste bane."
-	note.add_theme_font_size_override("font_size", 36)
+	note.add_theme_font_size_override("font_size", 40)
 	note.add_theme_color_override("font_color", INK)
 	note.position = Vector2(150, 1330)
 	add_child(note)
