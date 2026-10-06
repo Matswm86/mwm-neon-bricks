@@ -22,6 +22,9 @@ var easy: bool = true
 var shell_inset: Vector2 = Vector2.ZERO
 var sfx_on: bool = true
 var music_on: bool = true
+## Volume sliders, 0..1 (linear). Effects start lower than music.
+var sfx_volume: float = 0.6
+var music_volume: float = 0.9
 var haptics_on: bool = false
 var less_motion: bool = false
 var cleared: Array[int] = []
@@ -70,6 +73,22 @@ func set_sfx_on(on: bool) -> void:
 func set_music_on(on: bool) -> void:
 	music_on = on
 	save_game()
+	settings_changed.emit()
+
+
+## Slider drags call this with save = false on every step and save once
+## when the drag ends.
+func set_sfx_volume(v: float, save: bool = true) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
+	if save:
+		save_game()
+	settings_changed.emit()
+
+
+func set_music_volume(v: float, save: bool = true) -> void:
+	music_volume = clampf(v, 0.0, 1.0)
+	if save:
+		save_game()
 	settings_changed.emit()
 
 
@@ -136,6 +155,8 @@ func save_game() -> void:
 		{
 			"sfx": sfx_on,
 			"music": music_on,
+			"sfx_volume": sfx_volume,
+			"music_volume": music_volume,
 			"haptics": haptics_on,
 			"less_motion": less_motion,
 		},
@@ -171,6 +192,8 @@ func load_game() -> void:
 		var sd: Dictionary = s
 		sfx_on = bool(sd.get("sfx", true))
 		music_on = bool(sd.get("music", true))
+		sfx_volume = clampf(float(sd.get("sfx_volume", sfx_volume)), 0.0, 1.0)
+		music_volume = clampf(float(sd.get("music_volume", music_volume)), 0.0, 1.0)
 		haptics_on = bool(sd.get("haptics", false))
 		less_motion = bool(sd.get("less_motion", false))
 

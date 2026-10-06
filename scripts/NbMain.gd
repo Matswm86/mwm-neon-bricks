@@ -25,6 +25,9 @@ var map: NbMapScreen
 var settings: NbSettings
 var play: NbPlay
 var home: NbHomeDisc
+## Gear in a level, top-right; same two-tap guard as the home disc so a
+## child does not open the adult settings by accident.
+var play_gear: NbHomeDisc
 
 
 func _ready() -> void:
@@ -55,13 +58,20 @@ func _ready() -> void:
 	play.level_started.connect(music.play_level)
 	settings = NbSettings.new()
 	center_frame.add_child(settings)
-	settings.closed.connect(func() -> void: settings.visible = false)
+	settings.closed.connect(_close_settings)
+	settings.sfx_preview.connect(func() -> void: sfx.play("tink"))
 	home = NbHomeDisc.new()
 	home.icon = "home"
 	home.disc_radius = 68.0
 	home.ring_px = 5.0
 	home.confirmed.connect(open_map)
 	screen_root.add_child(home)
+	play_gear = NbHomeDisc.new()
+	play_gear.icon = "gear"
+	play_gear.disc_radius = 68.0
+	play_gear.ring_px = 5.0
+	play_gear.confirmed.connect(_open_settings)
+	screen_root.add_child(play_gear)
 	NeonBricks.settings_changed.connect(_apply_settings)
 	get_viewport().size_changed.connect(_layout)
 	_apply_settings()
@@ -82,10 +92,13 @@ func _frame() -> Control:
 
 func _apply_settings() -> void:
 	sfx.enabled = NeonBricks.sfx_on or NeonBricks.in_shell()
+	sfx.volume = NeonBricks.sfx_volume
 	music.set_enabled(NeonBricks.music_on)
+	music.set_volume(NeonBricks.music_volume)
 	world.set_less_motion(NeonBricks.less_motion)
 	var shell: bool = NeonBricks.in_shell()
 	home.visible = screen == "play" and not shell
+	play_gear.visible = screen == "play" and not shell
 	if map:
 		map.gear.visible = not shell
 
@@ -107,6 +120,11 @@ func apply_safe_area() -> void:
 	home.size = Vector2(HOME_HIT, HOME_HIT + dy)
 	home.disc_center = Vector2(104.0, 104.0 + dy)
 	home.queue_redraw()
+	var vw: float = get_viewport().get_visible_rect().size.x
+	play_gear.position = Vector2(vw - HOME_HIT, 0.0)
+	play_gear.size = Vector2(HOME_HIT, HOME_HIT + dy)
+	play_gear.disc_center = Vector2(HOME_HIT - 104.0, 104.0 + dy)
+	play_gear.queue_redraw()
 	map.set_safe_dy(dy, center_frame.position)
 
 
@@ -148,7 +166,17 @@ func open_map() -> void:
 
 
 func _open_settings() -> void:
+	if screen == "play":
+		play.pause()
 	settings.open()
+
+
+## In a level, closing settings shows the big resume disc; the ball moves
+## again only when it is tapped.
+func _close_settings() -> void:
+	settings.visible = false
+	if screen == "play":
+		play.show_resume()
 
 
 func _process(delta: float) -> void:
@@ -172,13 +200,13 @@ func _notification(what: int) -> void:
 func _on_back() -> void:
 	if NeonBricks.in_shell():
 		return
-	if screen == "play":
+	if settings.visible:
+		_close_settings()
+	elif screen == "play":
 		if play.card_visible():
 			open_map()
 		else:
 			home.press()
-	elif settings.visible:
-		settings.visible = false
 	else:
 		NeonBricks.save_game()
 		get_tree().quit()

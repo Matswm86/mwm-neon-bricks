@@ -1,11 +1,14 @@
 class_name NbSettings
 extends Control
 
-## Stand-alone settings panel (GDD 10.2), adult-facing, opened from the map
-## gear: Lett / Vanlig, sound, music (note icon), "Mindre bevegelse". Fredoka (SIL OFL), ink on
+## Stand-alone settings panel (GDD 10.2), adult-facing, opened from the gear
+## on the map or in a level: Lett / Vanlig, sound on/off + volume, music
+## (note icon) on/off + volume, "Mindre bevegelse". Fredoka (SIL OFL), ink on
 ## card. Difficulty takes effect from the next level start.
 
 signal closed
+## The effects slider was let go: the host plays one sample at the new level.
+signal sfx_preview
 
 const CARD := Color(1.000, 0.973, 0.933)
 const CARD_EDGE := Color(0.561, 0.514, 0.443)
@@ -13,14 +16,18 @@ const INK := Color(0.141, 0.129, 0.114)
 const ON := Color(1.0, 0.541, 0.239)
 const OFF := Color(1.0, 1.0, 1.0)
 const DIM := Color(0.0, 0.0, 0.0, 0.55)
-const PANEL := Rect2(90, 400, 900, 1120)
-const MUSIC_ICON_AT := Vector2(205, 1110)
+const PANEL := Rect2(90, 380, 900, 1240)
+const MUSIC_ICON_AT := Vector2(205, 1120)
+const TRACK := Color(0.851, 0.820, 0.773)
+const KNOB_PX: int = 84
 
 var _lett: Button
 var _vanlig: Button
 var _sound: Button
 var _music: Button
 var _motion: Button
+var _sfx_slider: HSlider
+var _music_slider: HSlider
 
 
 func _ready() -> void:
@@ -30,7 +37,7 @@ func _ready() -> void:
 	th.default_font = load("res://assets/fonts/Fredoka.ttf")
 	th.default_font_size = 44
 	theme = th
-	_heading("Innstillinger", Vector2(150, 450))
+	_heading("Innstillinger", Vector2(150, 420))
 	var close := NbDisc.new()
 	close.icon = "close"
 	close.disc_radius = 60.0
@@ -38,27 +45,39 @@ func _ready() -> void:
 	close.position = Vector2(PANEL.end.x - 170, PANEL.position.y + 10)
 	close.tapped.connect(func() -> void: closed.emit())
 	add_child(close)
-	_label("Vanskelighet", Vector2(150, 610))
-	_lett = _button("Lett", Rect2(150, 680, 360, 140))
-	_vanlig = _button("Vanlig", Rect2(570, 680, 360, 140))
+	_label("Vanskelighet", Vector2(150, 560))
+	_lett = _button("Lett", Rect2(150, 630, 360, 120))
+	_vanlig = _button("Vanlig", Rect2(570, 630, 360, 120))
 	_lett.pressed.connect(func() -> void: _set_easy(true))
 	_vanlig.pressed.connect(func() -> void: _set_easy(false))
-	_label("Lyd", Vector2(150, 900))
-	_sound = _button("", Rect2(570, 870, 360, 140))
+	_label("Lyd", Vector2(150, 820))
+	_sound = _button("", Rect2(570, 790, 360, 120))
 	_sound.pressed.connect(
 		func() -> void:
 			NeonBricks.set_sfx_on(not NeonBricks.sfx_on)
 			refresh()
 	)
 	# Music row: a note icon instead of a word (drawn in _draw).
-	_music = _button("", Rect2(570, 1040, 360, 140))
+	_sfx_slider = _slider(Rect2(150, 930, 780, 100))
+	_sfx_slider.value_changed.connect(func(v: float) -> void: NeonBricks.set_sfx_volume(v, false))
+	_sfx_slider.drag_ended.connect(
+		func(_changed: bool) -> void:
+			NeonBricks.save_game()
+			sfx_preview.emit()
+	)
+	_music = _button("", Rect2(570, 1060, 360, 120))
 	_music.pressed.connect(
 		func() -> void:
 			NeonBricks.set_music_on(not NeonBricks.music_on)
 			refresh()
 	)
-	_label("Mindre bevegelse", Vector2(150, 1240))
-	_motion = _button("", Rect2(570, 1210, 360, 140))
+	_music_slider = _slider(Rect2(150, 1200, 780, 100))
+	_music_slider.value_changed.connect(
+		func(v: float) -> void: NeonBricks.set_music_volume(v, false)
+	)
+	_music_slider.drag_ended.connect(func(_changed: bool) -> void: NeonBricks.save_game())
+	_label("Mindre bevegelse", Vector2(150, 1380))
+	_motion = _button("", Rect2(570, 1350, 360, 120))
 	_motion.pressed.connect(
 		func() -> void:
 			NeonBricks.set_less_motion(not NeonBricks.less_motion)
@@ -68,7 +87,7 @@ func _ready() -> void:
 	note.text = "Vanskelighet gjelder fra neste bane."
 	note.add_theme_font_size_override("font_size", 40)
 	note.add_theme_color_override("font_color", INK)
-	note.position = Vector2(150, 1400)
+	note.position = Vector2(150, 1515)
 	add_child(note)
 	visible = false
 
@@ -87,6 +106,8 @@ func refresh() -> void:
 	_style(_music, NeonBricks.music_on)
 	_motion.text = "På" if NeonBricks.less_motion else "Av"
 	_style(_motion, NeonBricks.less_motion)
+	_sfx_slider.set_value_no_signal(NeonBricks.sfx_volume)
+	_music_slider.set_value_no_signal(NeonBricks.music_volume)
 
 
 func _set_easy(on: bool) -> void:
@@ -119,6 +140,51 @@ func _button(t: String, r: Rect2) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	add_child(b)
 	return b
+
+
+## Volume slider 0..1: thick track, orange fill, a large round knob so a
+## thumb can grab it.
+func _slider(r: Rect2) -> HSlider:
+	var s := HSlider.new()
+	s.min_value = 0.0
+	s.max_value = 1.0
+	s.step = 0.05
+	s.position = r.position
+	s.size = r.size
+	s.focus_mode = Control.FOCUS_NONE
+	var track := StyleBoxFlat.new()
+	track.bg_color = TRACK
+	track.set_corner_radius_all(14)
+	track.content_margin_top = 14.0
+	track.content_margin_bottom = 14.0
+	s.add_theme_stylebox_override("slider", track)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = ON
+	fill.set_corner_radius_all(14)
+	fill.content_margin_top = 14.0
+	fill.content_margin_bottom = 14.0
+	s.add_theme_stylebox_override("grabber_area", fill)
+	s.add_theme_stylebox_override("grabber_area_highlight", fill)
+	var knob: Texture2D = _knob()
+	s.add_theme_icon_override("grabber", knob)
+	s.add_theme_icon_override("grabber_highlight", knob)
+	add_child(s)
+	return s
+
+
+func _knob() -> Texture2D:
+	var img := Image.create(KNOB_PX, KNOB_PX, false, Image.FORMAT_RGBA8)
+	var c: float = KNOB_PX * 0.5
+	for y: int in KNOB_PX:
+		for x: int in KNOB_PX:
+			var d: float = Vector2(x + 0.5 - c, y + 0.5 - c).length()
+			var col: Color = Color(0, 0, 0, 0)
+			if d <= c - 1.0:
+				col = INK if d > c - 7.0 else OFF
+			elif d <= c:
+				col = Color(INK, c - d)
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 
 func _style(b: Button, on: bool) -> void:

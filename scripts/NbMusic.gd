@@ -11,9 +11,9 @@ extends Node
 
 const BUS := &"Music"
 const TRACK := "res://assets/music/neon_bricks_theme.ogg"
-## Player level: moderate on phone speakers and at least 6 dB under the
-## effects (GDD 9).
-const BASE_DB: float = -11.0
+## Player level before the slider: the track's body (mean about -15 dBFS)
+## sits near -22 dB with the default slider, just under the effect peaks.
+const BASE_DB: float = -6.0
 const SILENT_DB: float = -60.0
 const FADE_S: float = 1.2
 const DUCK_DB: float = -12.0
@@ -25,6 +25,8 @@ var current: String = ""
 var _players: Array[AudioStreamPlayer] = []
 var _active: int = 0
 var _duck: float = 0.0
+## Music slider (NeonBricks.music_volume) in dB, added on top of fade and duck.
+var _vol_db: float = 0.0
 var _duck_tween: Tween
 var _fade_tweens: Array[Tween] = [null, null]
 var _streams: Dictionary = {}
@@ -63,6 +65,12 @@ func play_level(_level_id: int) -> void:
 	_switch(TRACK)
 
 
+## Slider value 0..1 (linear); takes effect at once, also mid-fade.
+func set_volume(v: float) -> void:
+	_vol_db = linear_to_db(maxf(v, 0.001))
+	_set_duck(_duck)
+
+
 func set_enabled(on: bool) -> void:
 	if enabled == on:
 		return
@@ -89,7 +97,7 @@ func duck(seconds: float) -> void:
 func _set_duck(db: float) -> void:
 	_duck = db
 	for p: AudioStreamPlayer in _players:
-		p.volume_db = minf(p.get_meta(&"fade_db", SILENT_DB) + _duck, 6.0)
+		p.volume_db = minf(p.get_meta(&"fade_db", SILENT_DB) + _duck + _vol_db, 6.0)
 
 
 func _switch(path: String) -> void:
@@ -105,7 +113,7 @@ func _switch(path: String) -> void:
 	var p: AudioStreamPlayer = _players[_active]
 	p.stream = _streams[path]
 	p.set_meta(&"fade_db", SILENT_DB)
-	p.volume_db = SILENT_DB + _duck
+	p.volume_db = SILENT_DB + _duck + _vol_db
 	p.play()
 	_fade(_active, BASE_DB, FADE_S, false)
 	_fade(old, SILENT_DB, FADE_S, true)
@@ -123,7 +131,7 @@ func _fade(i: int, to_db: float, secs: float, stop_after: bool) -> void:
 	tw.tween_method(
 		func(db: float) -> void:
 			p.set_meta(&"fade_db", db)
-			p.volume_db = db + _duck,
+			p.volume_db = db + _duck + _vol_db,
 		from,
 		to_db,
 		secs

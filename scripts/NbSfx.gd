@@ -34,8 +34,14 @@ const SOUNDS: Dictionary = {
 }
 const SHATTER_DB: float = -5.0
 const WIN_DUCK_S: float = 3.0
+## Level of every effect before the player's slider. The files peak near
+## -5 dBFS; with the default slider (0.6) their peaks land around -19 dB,
+## a few dB over the music body instead of 20 dB over it.
+const BASE_DB: float = -10.0
 
 var enabled: bool = true
+## Effects slider, 0..1 (linear), from NeonBricks.sfx_volume.
+var volume: float = 1.0
 var _streams: Dictionary = {}
 var _spread: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
@@ -63,7 +69,7 @@ func _ready() -> void:
 
 
 func play(name: String, pitch: float = 1.0, vol_db: float = 0.0) -> void:
-	if not enabled or not _streams.has(name):
+	if not enabled or volume <= 0.01 or not _streams.has(name):
 		return
 	var list: Array[AudioStream] = _streams[name]
 	if list.is_empty():
@@ -73,7 +79,7 @@ func play(name: String, pitch: float = 1.0, vol_db: float = 0.0) -> void:
 	_next = (_next + 1) % _players.size()
 	p.stream = list[_rng.randi() % list.size()]
 	p.pitch_scale = clampf(pitch * (1.0 + _rng.randf_range(-spread, spread)), 0.25, 4.0)
-	p.volume_db = vol_db
+	p.volume_db = vol_db + BASE_DB + linear_to_db(volume)
 	p.play()
 	if name == "win":
 		stinger_started.emit(WIN_DUCK_S)
