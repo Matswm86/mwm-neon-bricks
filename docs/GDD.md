@@ -1,6 +1,6 @@
 # MWM Neon Bricks: game design doc
 
-Version 1, 2026-10-05, game-designer. Game renamed from "Brick Nova" to **MWM Neon Bricks** on 2026-10-05 (trademark conflict). Use the new name everywhere, including save file, class names and voice lines.
+Version 2, 2026-10-06, game-designer (version 1 2026-10-05; version 2 = the action pass in section 15 after the owner said world 1 "gets boring fast"; where section 15 and an older section disagree, section 15 wins). Game renamed from "Brick Nova" to **MWM Neon Bricks** on 2026-10-05 (trademark conflict). Use the new name everywhere, including save file, class names and voice lines.
 
 Target: Android, portrait 1080x1920, Godot 4.6 `mobile` renderer, stand-alone app first, later a game inside MWM Play (ages 4-7 and 8+). Visuals belong to graphic-designer (`docs/DESIGN.md`); this doc only lists game-feel hooks.
 
@@ -63,7 +63,7 @@ Gameplay is simulated in a flat 2D logic plane in design px and rendered in 3D (
 ### 4.2 Ball motion
 
 - Constant speed per ball. Speed = level base speed x setting multiplier x ramp x power-up factor, clamped to `BALL_SPEED_MIN` 300 and `BALL_SPEED_MAX` 1000 px/s.
-- Ramp (Vanlig only): +2% every 15 s since launch, capped at +15%. Resets after a net catch and on restart. Lett has no ramp (rule 16).
+- Ramp (Vanlig only): **progress ramp** (section 15.4): speed x (1 + 0.15 x share of the level's breakable bricks broken). It replaces the old time ramp (+2% every 15 s). Lett has no ramp (rule 16).
 - Sub-stepping: `steps = ceil(speed * delta / 8)`, so no step moves more than 8 px. Per step, move X then test walls and bricks and reflect X; then move Y, test, reflect Y (the Krypton Egg per-axis method). All bricks overlapped in that axis step take one hit; the ball reflects once.
 - Corner case: if after a step the ball still overlaps a solid brick (e.g. a glider moved into it), push it out along the shortest axis and flip that velocity component.
 
@@ -81,7 +81,7 @@ Gameplay is simulated in a flat 2D logic plane in design px and rendered in 3D (
 2. **Chrome jitter:** every bounce off a chrome brick or portal rim rotates the velocity by a random -3 to +3 degrees (still subject to rule 1). Walls have no jitter (feels unfair at the paddle).
 3. **Loop detector:** on every wall or unbreakable-brick bounce, record (cell of contact rounded to 20 px, velocity octant). If the same record appears 3 times within 10 s with no breakable-brick hit and no paddle touch, rotate the velocity by 9 degrees toward the side with more remaining bricks, play a soft "zip" and show a short spark trail (no flash).
 4. **Dry-spell timer:** if 10 s pass with no paddle touch and no brick hit (ball trapped above in chrome), apply the same 9 degree nudge, then repeat every 5 s.
-5. **Helping hand (aim assist):** if `ASSIST_S` seconds pass with no brick broken (Lett 15, Vanlig 30), the next paddle bounce aims at the centre of the nearest SOLID breakable brick (angle clamped to +-MAX_BOUNCE_DEG). If none is solid (only phased ghosts left), aim at the nearest switch. The target brick glows softly for 1.0 s before the bounce (rule 18 idle-hint pattern). This kills the classic "hunting the last brick" frustration.
+5. **Helping hand (aim assist):** if `ASSIST_S` seconds pass with no brick broken (Lett 15, Vanlig 30), the next paddle bounce aims at the nearest SOLID breakable brick **that the ball can reach** (line-of-sight and bank-shot rule in section 15.3.4; aiming straight into chrome trapped the sim forever on a chrome level) (angle clamped to +-MAX_BOUNCE_DEG). If none is solid (only phased ghosts left), aim at the nearest switch. The target brick glows softly for 1.0 s before the bounce (rule 18 idle-hint pattern). This kills the classic "hunting the last brick" frustration.
 6. **Safety respawn:** if the ball position is NaN or more than 100 px outside the field, put it back on the paddle as a resting ball. No net charge spent, no sound.
 
 ### 4.5 Launch
@@ -107,19 +107,22 @@ The level is clear when no breakable brick is left (chrome, switches and portals
 
 Every type has a shape cue so colour is never the only cue (rule 36). Suggested colour roles are hints for graphic-designer.
 
-| Code | Name (NO / EN) | Hits | Shape cue | Behaviour | First level |
+| Code | Name (NO / EN) | Hits | Shape cue | Behaviour | First level (v2) |
 |---|---|---|---|---|---|
 | `G` | Glass / Glass | 1 | Plain smooth slab, no marks | Breaks on hit | 1 |
 | `D` | Dobbel / Double | 2 | Two raised dots side by side; first hit pops one dot and adds a crack | Breaks on 2nd hit | 2 |
-| `C` | Krom / Chrome | never | Diagonal stripes + a bolt in each corner | Unbreakable, not counted, bounce gets -3..+3 deg jitter. Komet bounces off it. | 4 |
+| `C` | Krom / Chrome | never | Diagonal stripes + a bolt in each corner | Unbreakable, not counted, bounce gets -3..+3 deg jitter. Komet bounces off it. | 9 (was 4) |
 | `T` | Trippel / Triple | 3 | Three dots in a triangle; one pops per hit | Breaks on 3rd hit | 6 |
-| `N` | Nova | 1 | Four-point star on the face | On break, 0.15 s later deals 1 hit to its 8 neighbours. A nova set off by a nova waits 0.35 s more, so bursts stay at 3 per second or fewer (rule 37). | 11 |
-| `M` | Glider | 1 | Chevrons `< >` on both ends | Slides horizontally at 120 px/s (Lett 80) along its row, reversing at walls, chrome or other bricks. | 16 |
-| `S` | Bryter / Switch | never | Ring with a dot in it (power symbol) | Not counted. A hit toggles which ghost set is solid. 0.5 s cooldown. | 21 |
-| `A` / `B` | Skygge / Ghost (set A, set B) | 1 when solid | Set A: dashed outline with square corner marks. Set B: dashed outline with round dots. Solid = filled + outline; phased = outline only, 30% opacity. | Set A starts solid, set B phased. Phased ghosts let the ball through. Counted for clear. | 21 |
-| `1` / `2` | Ormehull / Portal pair 1, pair 2 | never | Pair 1: single spiral. Pair 2: spiral with a star in the middle | Ball centre entering a portal circle (radius 40) leaves its partner 60 px along its velocity, velocity unchanged; 0.4 s per-ball cooldown. Not counted. | 26 |
+| `N` | Nova | 1 | Four-point star on the face | On break, 0.15 s later deals 1 hit to its 8 neighbours. A nova set off by a nova waits 0.35 s more, so bursts stay at 3 per second or fewer (rule 37). Blast area: section 15.3.5. | 3 (was 11) |
+| `M` | Glider | 1 | Chevrons `< >` on both ends | Slides horizontally at 120 px/s (Lett 80) along its row, reversing at walls, chrome or other bricks. Start direction: toward the field centre (c0-c4 move right, c5-c9 left). | 7 (was 16) |
+| `S` | Bryter / Switch | never | Ring with a dot in it (power symbol) | Not counted. A hit toggles which ghost set is solid. 0.5 s cooldown. | 16 (was 21) |
+| `A` / `B` | Skygge / Ghost (set A, set B) | 1 when solid | Set A: dashed outline with square corner marks. Set B: dashed outline with round dots. Solid = filled + outline; phased = outline only, 30% opacity. | Set A starts solid, set B phased. Phased ghosts let the ball through. Counted for clear. | 16 (was 21) |
+| `1` / `2` | Ormehull / Portal pair 1, pair 2 | never | Pair 1: single spiral. Pair 2: spiral with a star in the middle | Ball centre entering a portal circle (radius 40) leaves its partner 60 px along its velocity, velocity unchanged; 0.4 s per-ball cooldown. Not counted. | 21 (was 26) |
+| `K` + `+` | Sjef / Mini-boss | 10-30 (per level) | 3x2 cells, a core ring in the middle, one notch per HP around it | Section 15.3.6. `K` = top-left anchor cell, `+` = the other 5 cells it covers. | 5 |
 
-Carrier mark: a lowercase letter (`g`, `d`, `t`, `n`, `m`) is the same brick carrying a power-up capsule, drawn with a small 5-point star inlay. The capsule drops when the brick breaks. The level data says which power-up its carriers hold.
+Carrier mark: a lowercase letter (`g`, `d`, `t`, `n`, `m`) is the same brick carrying a power-up capsule, drawn with a small 5-point star inlay. The capsule drops when the brick breaks. The level data says which power-up its carriers hold: v2 uses a `carriers` list assigned round-robin in reading order (section 15.8).
+
+Level mechanic (not a brick code): **Marsj / March** (first level 11), a whole block of rows moves side to side and steps down like an invader formation (section 15.3.7).
 
 ### 5.2 Power-ups (own names, own twists)
 
@@ -127,19 +130,19 @@ Capsule: 112 x 56 pill with the power-up icon (shape-coded). Falls at 240 px/s (
 
 | Name (NO / EN) | Icon | Effect | Twist | First level |
 |---|---|---|---|---|
-| **Komet / Comet** (VERTICAL SLICE) | Ball with a swept tail | For 8 bricks or 6 s (Lett: 10 bricks or 8 s), whichever ends first, the ball breaks any breakable brick in ONE hit and passes through it without bouncing. Still bounces off walls, chrome, switches, paddle, net. | Remaining bricks shown as small sparks orbiting the ball, one winks out per brick: the count is a shape, not a number. | 3 |
+| **Komet / Comet** (VERTICAL SLICE) | Ball with a swept tail | For 8 bricks or 6 s (Lett: 10 bricks or 8 s), whichever ends first, the ball breaks any breakable brick in ONE hit and passes through it without bouncing. Still bounces off walls, chrome, switches, paddle, net. Against a boss: 2 damage and a bounce (uses one brick of the count). | Remaining bricks shown as small sparks orbiting the ball, one winks out per brick: the count is a shape, not a number. | 1 (was 3) |
 | Bredvinge / Wide Wing | Paddle with two wings | Paddle width x1.5 for 15 s (Lett x1.3 for 20 s), grows over 0.3 s, max 560 px. | Five "feathers" on each wing fold away one by one as time runs out: a countdown with no digits. | 8 |
-| Ekko / Echo | Three overlapping circles | Two translucent echo balls split from the main ball at -20 and +20 degrees. | Echoes fade after 10 s and can never be "lost": falling echoes just dissolve. If the main ball falls through an empty net while an echo lives, the oldest echo becomes the main ball. | 13 |
-| Saktetid / Tape Slow | Cassette reel | Ball speed x0.65 for 10 s (Lett x0.75). | Music and effects pitch down like a slowed tape, then wind back up over 0.5 s. | 18 |
-| Neonpuls / Neon Pulse | Paddle with three arcs above it | 6 waves, 1.0 s apart: each deals 1 hit to the lowest breakable brick in every column the paddle overlaps. No tap needed. | Fires on its own, so it adds no input and no reflex demand. | 23 |
-| Skjoldnett / Shield Net | Net with a plus | Vanlig: +1 net charge (max 3). | In Lett (net already unlimited) carriers of this type drop Bredvinge instead. | 28 |
+| Ekko / Echo | Three overlapping circles | Two translucent echo balls split from the main ball at -20 and +20 degrees. | Echoes fade after 10 s and can never be "lost": falling echoes just dissolve. If the main ball falls through an empty net while an echo lives, the oldest echo becomes the main ball. Echoes break bricks and hit bosses like the main ball; they never home or aim (section 15.3.4). Max 3 balls. | 4 (was 13) |
+| Saktetid / Tape Slow | Cassette reel | Ball speed x0.65 for 10 s (Lett x0.75). | Music and effects pitch down like a slowed tape, then wind back up over 0.5 s. | 18 (later phase) |
+| Neonpuls / Neon Pulse | Paddle with three arcs above it | 6 waves, 1.0 s apart: each deals 1 hit to the lowest breakable brick in every column the paddle overlaps. No tap needed. | Fires on its own, so it adds no input and no reflex demand. A boss in that column counts as the lowest brick if it is lowest. | 13 (was 23) |
+| Skjoldnett / Shield Net | Net with a plus | Vanlig: +1 net charge (max 3). | In Lett (net already unlimited) carriers of this type drop Bredvinge instead. | 23 (was 28, later phase) |
 
 ## 6. Progression
 
 ### 6.1 Rules
 
 - 6 worlds x 5 levels = 30 hand-made levels, then endless.
-- Every world follows one rhythm: **level 1** introduces one new brick type, **level 2** practises it, **level 3** introduces one new power-up, **level 4** combines, **level 5** is a breather (fewer traps, more carriers, a picture shape, Vanlig net unlimited).
+- **v2 rhythm (section 15):** every world brings three new things, one per level, and ends in a boss. **Level 1** new brick, **level 2** new brick or level mechanic, **level 3** new power-up, **level 4** combines, **level 5** mini-boss (Vanlig net unlimited, more capsules, so it keeps the breather's safety while being the world's climax). (v1 rhythm, superseded: one brick, one power-up, breather.)
 - **No sequential lock** (my call, owner said "all levels open" for stand-alone): any unlocked level can be picked from the map. The map pulses the lowest uncleared level (1 Hz glow) as the suggestion. Nothing is ever shown locked (no padlocks, rule 22 counter-consideration 1).
 - **Free part (owner):** the game holds one flag, `full_unlock: bool`, default `true`. The MWM Play adapter sets it on `enter()` through a public hook `set_full_unlock(on: bool)` (same style as `set_shell_inset`). The game does not check purchases itself.
   - `full_unlock == false`: the map shows only world 1 levels 1-3. Level nodes 4-5, world arrows and the endless page are not drawn at all. Clearing level 3 shows the normal win card with replay + home only (no "next") and emits `free_levels_finished`; the shell then shows its "Du har spilt alle banene her" card.
@@ -150,118 +153,22 @@ Capsule: 112 x 56 pill with the power-up icon (shape-coded). Falls at 240 px/s (
 
 | World | Name (NO / EN) | Setting cue for graphic-designer | New brick (L1) | New power-up (L3) |
 |---|---|---|---|---|
-| 1 | Neonstranda / Neon Beach | Sunset sun, palm silhouettes, grid sea | Glass, Double (L2), Chrome (L4) | Komet |
-| 2 | Rutenettbyen / Grid City | Night skyline, neon signs | Triple | Bredvinge |
-| 3 | Arkadehallen / Arcade Hall | Giant cabinets, pixel stars | Nova | Ekko |
-| 4 | Nattveien / Night Highway | Endless road, passing lights | Glider | Saktetid |
-| 5 | Krystallgrotta / Crystal Cave | Glowing crystals, mist | Switch + Ghost | Neonpuls |
-| 6 | Stjerneporten / Star Gate | Space, rings, nebula | Portal | Skjoldnett |
+| 1 | Neonstranda / Neon Beach | Sunset sun, palm silhouettes, grid sea | Glass (L1), Double (L2), Nova (L3) | Komet (L1), Ekko (L4); boss Solkjernen (L5) |
+| 2 | Rutenettbyen / Grid City | Night skyline, neon signs | Triple (L6), Glider (L7), Chrome (L9) | Bredvinge (L8); boss Nattaxi (L10) |
+| 3 | Arkadehallen / Arcade Hall | Giant cabinets, pixel stars | March block (L11, L12) | Neonpuls (L13); boss Arkadekongen (L15) |
+| 4 | Nattveien / Night Highway | Endless road, passing lights | Switch + Ghost (L16) | Saktetid (L18); boss (L20) |
+| 5 | Krystallgrotta / Crystal Cave | Glowing crystals, mist | Portal (L21) | Skjoldnett (L23); boss (L25) |
+| 6 | Stjerneporten / Star Gate | Space, rings, nebula | Remix + one new element (open question) | Final boss Neonnova (L30) |
 
-World 1 teaches three things (Double, Komet, Chrome) on top of the basics because those are the vertical-slice elements; each still arrives alone in its own level.
+v2 (section 15): elements arrive 2-3 times sooner than in v1, so world 1 alone shows Glass, Double, Nova, Komet, Ekko and a boss. Chrome moved to level 9 because a wall that never breaks is the least fun thing to meet early.
 
 ### 6.3 Level table
 
-Speeds are base ball speed in px/s. Paddle = width in px. Net: inf = unlimited, 3 = three charges (Vanlig only; Lett is always inf). Target time = median clear time to aim for. Restart chance = share of Vanlig attempts with at least one gentle restart.
+**Superseded 2026-10-06 by section 15.6** (levels 1-15, simulated) and 15.9 (levels 16-30, later phase). The v1 table is in git history (commit `827bbc8` and earlier).
 
-| # | W | Name | New / focus | Breakable | Other | Carriers | Lett speed | Vanlig speed | Vanlig paddle | Vanlig net | Target time Lett / Vanlig | Restart chance Vanlig |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | Første lys | Glass, paddle, ball | 14 | | 0 | 520 | 680 | 280 | inf | 54 / 42 s (my calc) | 0 |
-| 2 | 1 | To prikker | Double | 22 | | 0 | 520 | 680 | 280 | inf | 93 / 76 s (my calc) | 0 |
-| 3 | 1 | Kometen | Komet | 32 | | 2 Komet | 520 | 680 | 280 | inf | 100 / 82 s (my calc) | 0 |
-| 4 | 1 | Krompilarer | Chrome | 22 | 4 C | 2 Komet | 520 | 680 | 280 | inf | 95 / 83 s (my calc) | 0 |
-| 5 | 1 | Palmesol | Breather (sun picture) | 28 | | 2 Komet | 520 | 680 | 280 | inf | 79 / 75 s (my calc) | 0 |
-| 6 | 2 | Trekant | Triple | 24 | | 1 Komet | 530 | 720 | 280 | 3 | 90 / 80 s | 5% (guess) |
-| 7 | 2 | Skyline | Triple + chrome roofs | 30 | 6 C | 2 Komet | 530 | 720 | 280 | 3 | 100 / 90 s | 8% (guess) |
-| 8 | 2 | Vingene | Bredvinge | 32 | 4 C | 2 Bredvinge | 530 | 720 | 280 | 3 | 100 / 90 s | 6% (guess) |
-| 9 | 2 | Gatelys | Chrome corridors | 30 | 10 C | 1 Komet, 1 Bredvinge | 530 | 720 | 280 | 3 | 110 / 100 s | 10% (guess) |
-| 10 | 2 | Taxi | Breather (car picture) | 30 | | 3 mixed | 530 | 720 | 280 | inf | 90 / 80 s | 0 |
-| 11 | 3 | Nova | Nova | 30 | | 1 Komet | 540 | 760 | 260 | 3 | 90 / 80 s | 8% (guess) |
-| 12 | 3 | Kjedereaksjon | Nova chains | 36 | 4 C | 1 Bredvinge | 540 | 760 | 260 | 3 | 100 / 90 s | 10% (guess) |
-| 13 | 3 | Ekko | Ekko | 36 | 4 C | 2 Ekko | 540 | 760 | 260 | 3 | 100 / 90 s | 8% (guess) |
-| 14 | 3 | Flipper | Chrome bumpers + novas | 34 | 8 C | 1 Ekko, 1 Komet | 540 | 760 | 260 | 3 | 110 / 100 s | 12% (guess) |
-| 15 | 3 | Joystick | Breather (joystick picture) | 32 | | 3 mixed | 540 | 760 | 260 | inf | 90 / 85 s | 0 |
-| 16 | 4 | Glidere | Glider | 30 | | 1 Komet | 550 | 800 | 260 | 3 | 100 / 90 s | 10% (guess) |
-| 17 | 4 | Rushtid | Two glider lanes | 36 | 4 C | 1 Ekko | 550 | 800 | 260 | 3 | 110 / 100 s | 12% (guess) |
-| 18 | 4 | Saktetid | Saktetid | 38 | 4 C | 2 Saktetid | 550 | 800 | 260 | 3 | 110 / 100 s | 10% (guess) |
-| 19 | 4 | Filskifte | Gliders + chrome gates | 38 | 10 C | 1 Saktetid, 1 Komet | 550 | 800 | 260 | 3 | 120 / 110 s | 15% (guess) |
-| 20 | 4 | Solnedgang | Breather (road into sun) | 34 | | 3 mixed | 550 | 800 | 260 | inf | 95 / 90 s | 0 |
-| 21 | 5 | Bryteren | Switch + Ghost | 30 | 2 S | 1 Komet | 560 | 840 | 240 | 3 | 110 / 100 s | 12% (guess) |
-| 22 | 5 | Skyggevegg | Ghost walls guarding rows | 38 | 2 S, 4 C | 1 Ekko | 560 | 840 | 240 | 3 | 120 / 110 s | 15% (guess) |
-| 23 | 5 | Neonpuls | Neonpuls | 40 | 2 S | 2 Neonpuls | 560 | 840 | 240 | 3 | 110 / 100 s | 12% (guess) |
-| 24 | 5 | Labyrint | Switch + chrome + triples | 40 | 2 S, 10 C | 1 Neonpuls, 1 Saktetid | 560 | 840 | 240 | 3 | 130 / 120 s | 18% (guess) |
-| 25 | 5 | Krystallhjerte | Breather (heart picture) | 36 | | 3 mixed | 560 | 840 | 240 | inf | 100 / 95 s | 0 |
-| 26 | 6 | Ormehull | Portal (1 pair) | 34 | 1 pair | 1 Komet | 570 | 880 | 240 | 3 | 110 / 100 s | 15% (guess) |
-| 27 | 6 | Dobbelport | Two portal pairs | 40 | 2 pairs, 4 C | 1 Ekko | 570 | 880 | 240 | 3 | 120 / 110 s | 18% (guess) |
-| 28 | 6 | Skjoldnett | Skjoldnett | 42 | 1 pair, 4 C | 2 Skjoldnett | 570 | 880 | 240 | 3 | 120 / 110 s | 12% (guess) |
-| 29 | 6 | Alt i ett | Every element | 44 | 1 pair, 2 S, 8 C | 1 Neonpuls, 1 Saktetid | 570 | 880 | 240 | 3 | 140 / 130 s | 20% (guess) |
-| 30 | 6 | Neonnova | Finale (big nova picture), generous | 48 | 1 pair | 4 mixed | 570 | 880 | 240 | inf | 130 / 120 s | 0 |
+### 6.4 Maps
 
-Levels 1-5 times are (my calc): `tools/clear_time_sim.py`, 150 runs per level and setting, with a paddle that never misses and hits at a random offset of up to 60% of its half-width. Real children will be slower; treat these as floors. Levels 6-30 times and all restart chances are design targets (guess) that the builder verifies with the same sim and the owner verifies on the phone. Rule of thumb for later maps: keep Lett median under 2.5 min so one level fits a young child's attention.
-
-### 6.4 World 1 maps (vertical slice, build these exactly)
-
-Format: 10 characters per row = columns c0-c9; rows listed from r0 (top, y 340) down; rows not listed are empty. `.` = empty. Codes from section 5.1. Every map is mirror-symmetric except where noted.
-
-**Level 1: Første lys** (glass only; 14 bricks; no carriers)
-```
-r0 ..........
-r1 ..........
-r2 ..........
-r3 ..........
-r4 .GGGGGGGG.
-r5 ..GGGGGG..
-```
-Low and wide: the first bounce off the paddle almost always hits something.
-
-**Level 2: To prikker** (double; 14 G + 8 D = 22 bricks, 30 hits)
-```
-r0 ..........
-r1 ..........
-r2 ..........
-r3 .GDDGGDDG.
-r4 .GDDGGDDG.
-r5 ..GGGGGG..
-```
-A face: two blocks of doubles are the eyes. The first hit on a double shows the dot popping, which teaches "this one needs two".
-
-**Level 3: Kometen** (Komet; 26 G + 4 D + 2 g = 32 bricks; carriers: Komet)
-```
-r0 ..........
-r1 ..........
-r2 GGGGGGGGGG
-r3 GGDDGGDDGG
-r4 GGGGGGGGGG
-r5 ..g....g..
-```
-The two carriers hang below the wall, so they are almost always the first things hit. The dense wall above makes the comet's ploughing visible.
-
-**Level 4: Krompilarer** (chrome; 18 G + 2 D + 2 d = 22 bricks; 4 chrome; carriers: Komet)
-```
-r0 ..........
-r1 ..........
-r2 GGGGGGGGGG
-r3 .GGGGGGGG.
-r4 ..........
-r5 C...CC...C
-r6 ..........
-r7 ..dD..Dd..
-```
-Chrome posts in r5 deflect but never enclose anything. Carrier doubles in r7 drop their capsule on the second hit.
-
-**Level 5: Palmesol** (breather; 18 G + 8 D + 2 g = 28 bricks; carriers: Komet)
-```
-r0 ..........
-r1 ..........
-r2 ..GGGGGG..
-r3 .GGGGGGGG.
-r4 ..........
-r5 .DDDDDDDD.
-r6 ..........
-r7 ..GgGGgG..
-```
-A synthwave sun with horizontal slices. Two comets make the finale of world 1 feel generous.
-
-Level data file format (suggested, builder's call): one JSON or `.tres` per level with `rows` (array of 12 strings), `carrier_powerup`, `lett_speed`, `vanlig_speed`, `vanlig_paddle`, `vanlig_net` (0 = unlimited). Values come from the table in 6.3.
+**Superseded 2026-10-06 by section 15.7** (maps for levels 1-15, revised world 1 included). Level data format additions are in 15.8. The v1 world 1 maps that shipped in the slice are in git history (commit `827bbc8`, `scripts/NbLevels.gd`).
 
 ### 6.5 Endless generator ("Neonveien", after the 30 levels)
 
@@ -271,7 +178,7 @@ Shown as the last page of the world map. Available when `full_unlock` is true an
 2. Elements allowed: those first introduced in levels the player has cleared (save file). World 1 elements always.
 3. Rows used: `4 + round(4 * d)`, starting at r2. Lowest brick row never below r9.
 4. Pick one template for the left half (columns 0-4): full block, checker, stripes, diamond, pyramid, frame. Remove 10% of filled cells at random. Mirror to columns 5-9.
-5. Per filled cell, roll type: Chrome `0.05 + 0.10d` (never in the lowest used row); Triple `0.10d`; Double `0.20 + 0.15d`; Nova `0.04` (max 3 per level); else Glass. Gliders: if allowed, 30% of levels turn one full row into gliders (that row is not mirrored-locked). Switch + ghosts: if allowed, 30% of levels: switches at the two outer cells of one row, one ghost row of set A, one of set B. Portals: if allowed, 25% of levels: one pair in two empty mirrored cells.
+5. Per filled cell, roll type: Chrome `0.05 + 0.10d` (never in the lowest used row); Triple `0.10d`; Double `0.20 + 0.15d`; Nova `0.08` (max 6 per level, v2); else Glass. v2: if March is allowed, 25% of levels make the formation a march block (only when the formation is at most 8 columns wide); every 10th endless level is a boss level using the L15 boss rules with HP `20 + k/5` (Vanlig) or `12 + k/10` (Lett), max 40. Gliders: if allowed, 30% of levels turn one full row into gliders (that row is not mirrored-locked). Switch + ghosts: if allowed, 30% of levels: switches at the two outer cells of one row, one ghost row of set A, one of set B. Portals: if allowed, 25% of levels: one pair in two empty mirrored cells.
 6. Carriers: `2 + floor(2d)` breakable cells in the lower half of the formation, each with a random allowed power-up.
 7. Validity: breakable count 20-48; chrome at most 20% of filled cells; no breakable brick whose 4 neighbours are all chrome or wall (if found, turn one chrome neighbour into Double). If invalid, reroll with seed + 1, up to 20 tries, then fall back to the "pyramid" template with Glass only.
 8. Speeds: Lett 570; Vanlig `880 + 10 * floor(k / 5)`, max 960. Paddle: Lett 400, Vanlig 240. Net: Vanlig 3 charges; every 5th endless level is a breather (`d` halved, net unlimited).
@@ -295,9 +202,9 @@ All tunables live in one const block or data file (studio rule). Keys are sugges
 | `DRAG_GAIN` | 1.25 | 1.25 | x | Relative drag, as in Krypton Egg |
 | `PADDLE_MAX_SPEED` | 6000 | 6000 | px/s | Only guards against glitchy touch events |
 | `BALL_RADIUS` | 22 | 22 | px | |
-| `BALL_SPEED_BASE` | 520-570 by world | 680-880 by world | px/s | Table 6.3 |
+| `BALL_SPEED_BASE` | 520-570 by world | 720-880 by world (v2) | px/s | Table 15.6 |
 | `BALL_SPEED_MIN / MAX` | 300 / 1000 | same | px/s | Hard clamps |
-| `SPEED_RAMP_STEP / EVERY / CAP` | off | +2% / 15 s / +15% | | Resets on net catch and restart |
+| `RAMP_PROGRESS` (v2) | off | +15% at 100% broken | | Replaces the v1 time ramp; section 15.4 |
 | `SUBSTEP_MAX_PX` | 8 | 8 | px | |
 | `MAX_BOUNCE_DEG` | 55 | 60 | deg | From vertical at paddle edge |
 | `PADDLE_ENGLISH` | 0.05 | 0.10 | x paddle_vx | |
@@ -332,6 +239,8 @@ All tunables live in one const block or data file (studio rule). Keys are sugges
 | `HOLDOVER_MS` | 300 | 300 | ms | Rule 8 |
 | `FREE_LEVELS` | 3 | 3 | | Only used when `full_unlock` is false |
 
+v2 (action pass): combo, finale, boss, march and the other new keys are in the const block in section 15.4.
+
 ## 8. Screens and session shape
 
 ### 8.1 World map
@@ -345,7 +254,8 @@ One world per page: the world's scene in the background, 5 level discs (diameter
 - 3.0 s: ball launches by itself if the child has not tapped.
 - First brick break: big satisfying break (section 9). Each following brick before the next paddle touch plays one step higher in the scale.
 - Ball misses: net catches it with a soft "bwomm" and ripple, play continues. The child learns the net is friendly.
-- About 54 s (Lett, my calc): last brick, slow-mo, win card.
+- About 15-25 s: a carrier in the lower row drops the first Komet capsule; the Lett magnet pulls it to the paddle.
+- About 59 s (Lett, v2 level 1, my calc): last brick, slow-mo, win card.
 - Idle hint: if no drag for 7 s during play, the hand icon returns (rule 18).
 
 ### 8.3 Win card (natural stopping point, owner)
@@ -383,7 +293,7 @@ Save on level clear, on difficulty or setting change, on leaving and on `NOTIFIC
 | Paddle hit | Paddle squash to 90% height and back in 100 ms; small spark ring at contact | Synth "bop", pitch by hit offset (centre low, edges high) | 12 ms tick | No squash; spark ring stays (it is not motion of the screen) |
 | Wall hit | Wall segment glows 120 ms | Soft tick | none | same |
 | Brick hit, not broken | Brick squash 90% for 80 ms; dot pops off (Double/Triple) | Glassy "tink" | none | No squash; dot pops |
-| Brick break | GPU shards: 24 particles, 0.5 s life, gravity toward camera; local glow on the brick area only | Pentatonic note, one step up per brick since the last paddle touch (max 8 steps), resets on paddle touch | none | No particles: brick fades out in 150 ms |
+| Brick break | GPU shards: 24 particles (v2: 32 at combo 5+, 40 at combo 10+), 0.5 s life, gravity toward camera; local glow on the brick area only | Pentatonic note, one step up per combo step (v2, section 15.3.1: max 12 steps, resets when the combo drops, NOT on paddle touch) | none | No particles: brick fades out in 150 ms |
 | Chrome hit | Spark at contact, no glow | Metallic "ting" | none | same |
 | Nova blast | Ring wave over the 3x3 area, 300 ms | Low "whump" | 20 ms | No ring wave, neighbours just break |
 | Net catch | Net ripple from contact, 400 ms; pip cracks (Vanlig) | Soft low "bwomm" | 25 ms | No ripple; pip just disappears |
@@ -409,7 +319,7 @@ Performance hint for the builder: pool 8 particle emitters, at most 6 alive at o
 | Aspect | Lett | Vanlig |
 |---|---|---|
 | Net | Unlimited, every level | Unlimited in world 1 and breathers; 3 charges elsewhere, then gentle restart |
-| Ball speed | 520-570 px/s, no ramp | 680-880 px/s, +2%/15 s up to +15% |
+| Ball speed | 520-570 px/s, no ramp | 720-880 px/s (v2), +15% at 100% of bricks broken (progress ramp) |
 | Paddle | 400 px | 280 -> 240 px |
 | Edge grace | full ball radius | 0.6 ball radius |
 | Max bounce angle | 55 deg | 60 deg |
@@ -438,6 +348,8 @@ In: world 1 map page, levels 1-5 exactly as in 6.4, paddle with relative drag, o
 
 Out: worlds 2-6, other bricks and power-ups, endless, voice lines (blocked on a native Norwegian voice, see MWM Les), store art.
 
+Status 2026-10-06: the slice shipped (QA `docs/QA_SLICE_2026-10-06.md`). The next build is the action pass, section 15.10.
+
 Slice acceptance hints for game-qa: Lett level 1 clears with no instruction (kids walk-through, sound off); no gameplay touch target below y 1664 or inside 232x232; never more than 3 flashes in any 1 s window during a Komet run through level 3; ball never travels flatter than 20 degrees (log check); level 4 never has a ball trapped above chrome for more than 15 s.
 
 ## 13. Play together tip (rule 42, draft)
@@ -450,3 +362,491 @@ Slice acceptance hints for game-qa: Lett level 1 clears with no instruction (kid
 2. **Net charges:** I read "3 charges, then gently restart" as: the net catches 3 times, the 4th miss restarts the level from full bricks. Correct, or should the 3rd catch already restart?
 3. **Endless:** available after world 1 is cleared and only in the paid part (my default)? Or only after all 30 levels?
 4. **No level order:** in the full game any level can be picked from the map, nothing ever shown locked. OK, or should worlds open one after another?
+
+---
+
+## 15. Action pass 2026-10-06 (owner: "boring fast")
+
+Owner, verbatim, after playing the world 1 slice: "Add more levels on Neon Bricks. Also should have more elements and more action. It gets boring fast." This section is the fix. Where it disagrees with an older section, this section wins. Owner rules that stay untouched: the net rules in 4.6 (owner), all levels open, the free part (levels 1-3), the win card as stopping point, no shake under "Mindre bevegelse", and the child rules for Lett (no reflex demands, no game over, at most 3 flashes per second, colour never the only cue, touch targets at least 200 px).
+
+### 15.1 Diagnosis: why world 1 gets boring
+
+Measured with `tools/action_sim.py` (my calc, 80 runs per level and setting, near-perfect paddle bot, so real players are slower and the dead stretches are longer):
+
+| v1 level | Bricks | Median clear Lett / Vanlig | Breaks per second (Vanlig) | Longest gap between breaks, median (Vanlig) | Time spent on the last 3 bricks (Vanlig) | Capsules caught |
+|---|---|---|---|---|---|---|
+| 1 | 14 | 57 / 48 s | 0.31 | 12.0 s | 14.7 s (30%) | 0 |
+| 2 | 22 | 100 / 83 s | 0.28 | 15.0 s | 20.6 s (25%) | 0 |
+| 3 | 32 | 104 / 84 s | 0.39 | 16.0 s | 21.4 s (25%) | 1 |
+| 4 | 22 | 95 / 79 s | 0.29 | 19.0 s | 22.0 s (28%) | 2 |
+| 5 | 28 | 79 / 67 s | 0.44 | 14.6 s | 19.2 s (29%) | 2 |
+
+1. **Too few events.** One brick breaks every 2.3-3.6 s (Vanlig), and every level has a 12-19 s stretch where nothing breaks. Levels 1-2 have no capsule at all; levels 3-5 have 2 carriers each, so a capsule falls about once a minute (my calc).
+2. **The end drags.** A quarter to a third of every level is spent hunting the last 3 bricks (19-22 s in Vanlig, up to 29 s in Lett).
+3. **New things arrive too late.** v1 gave one new brick and one new power-up per world: a player who stops after world 1 never sees Nova (level 11), Ekko (13) or Glider (16). World 1's only "new" bricks were Double and Chrome, and Chrome is a wall that never breaks.
+4. **Nothing escalates inside a level.** The ball is slow (Vanlig 680 px/s crosses the 1080 px from paddle to top row in 1.6 s), the v1 ramp adds at most 15% and resets on every net catch, and nothing moves except the ball. A hit 40 bricks into a chain sounds the same as the first one, except for the pentatonic step, which resets on every paddle touch.
+
+### 15.2 What changes (summary)
+
+| # | Change | Why |
+|---|---|---|
+| 1 | **Combo meter "Kjede"** with tiers, rising pitch, bigger shards, a capsule every 8 combo (Lett 6), slow-mo on big chains | Turns quick breaks into a visible, audible streak and feeds more capsules |
+| 2 | **Denser levels**: 30-54 bricks instead of 14-32, carriers from level 1, and every level has a combo bonus pool | 2-3x more breaks per second |
+| 3 | **Elements pulled forward**: Komet L1, Nova L3, Ekko L4, Glider L7, Neonpuls L13 | Something new every level; Nova chains are the cheapest "action" there is |
+| 4 | **Mini-boss** at the end of every world (L5, L10, L15) | Each world ends on a climax |
+| 5 | **March block** (L11): a formation that slides and steps down | Moving targets; escalation inside the level |
+| 6 | **Progress speed ramp** (Vanlig): +15% by the last brick, no reset | The level speeds up as it empties |
+| 7 | **Finale helper**: at 3 bricks left (Lett 4) the ball aims and gently homes, with line-of-sight | Kills the last-bricks drag |
+| 8 | **Vanlig base speed** up: 720 / 760 / 800 px/s in worlds 1-3 (v1: 680 / 720 / 760). Lett unchanged | Vanlig feels busy; Lett stays calm |
+
+Result (my calc, same sim, section 15.6): the new levels 1-15 break 0.62-1.58 bricks per second in Vanlig (v1: 0.28-0.44), the longest gap is 3.7-9.8 s (v1: 12-19 s), and the last 3 bricks take 7-22% of a non-boss level, 4-8 s (v1: 25-30%, 15-22 s).
+
+### 15.3 New and changed mechanics (exact rules)
+
+#### 15.3.1 Combo meter "Kjede" (all levels, both settings)
+
+- **Combo count:** +1 for every breakable brick broken AND every hit on a boss. If no such event happens for `COMBO_WINDOW_S` (Lett 3.0 s, Vanlig 2.0 s, game time), the combo drops to 0. A paddle touch does **not** reset it (change from v1). Nova chain breaks and Neonpuls hits count.
+- **Pitch:** a brick break plays pentatonic step `min(combo - 1, 11)` (12 steps, two and a half octaves). This replaces the v1 "steps since the last paddle touch".
+- **Meter:** a strip of 10 segments on the top rail, x 290-1040, y 248-272 (outside the 232 px home square, nothing tappable). Segment n lights when combo >= n. At combo 10+ all segments are lit and get a steady outline glow ("Neonrush"). When the combo drops, the strip drains from right to left over 0.3 s. The count is a shape (segments), not only a colour.
+- **Tiers:**
+
+| Tier | Combo | Shards per break | Ball trail | Sound | Screen |
+|---|---|---|---|---|---|
+| Glød | 1-4 | 24 (v1) | normal | note only | none |
+| Varm | 5-9 | 32 | 1.5x long | note + soft sub-bass thump | none |
+| Neonrush | 10+ | 40 | 1.5x long, rim colour shifts toward white-hot | note + hi-hat layer joins the music | Steady rim glow on the field frame (no flashing). Vanlig only: 3 px shake for 60 ms per break, at most 3 per second |
+
+- **Combo capsule:** each time the combo reaches a multiple of `COMBO_DROP_EVERY` (Lett 6, Vanlig 8), a capsule spawns at the centre of the brick that made that step (for a boss hit: at the bottom centre of the boss). Its kind is the next entry of the level's `bonus_pool`, round-robin from index 0 at level start. `CAPSULE_MAX` (3 falling at once) still holds; a drop over the cap is skipped and the index does not advance.
+- **Chain slow-mo:** when 4 or more bricks break within 0.4 s of game time (Nova chains, Komet ploughs), time scale goes to 0.5 for 0.25 s real time, then back to 1.0 over 0.15 s. Cooldown 3 s. Never during the last-brick slow-mo. Kept under "Mindre bevegelse" (it is not screen motion).
+- **Flash safety:** every glow spike from combos, boss hits and phase roars goes through the existing limiter (at most 3 per second). Shards and sound are never limited.
+
+#### 15.3.2 Progress speed ramp (Vanlig only)
+
+`speed = base x (1 + RAMP_PROGRESS x broken / total)`, with `RAMP_PROGRESS` 0.15, `broken` = breakable bricks broken so far (a boss counts as 1 when it dies), `total` = breakable bricks at level start plus boss minions spawned so far. Clamped to `BALL_SPEED_MAX` 1000. No reset on net catch; reset only on gentle restart (bricks come back, so `broken` is 0 again). The v1 time ramp is removed. Lett: no ramp.
+
+#### 15.3.3 Finale helper "Siste tre"
+
+Active while `breakable_left <= FINALE_LEFT` (Lett 4, Vanlig 3) and the level started with at least 10 breakable bricks. A boss counts as one brick.
+
+1. Every main-ball paddle bounce is an aimed bounce at `aim_point` (15.3.4), angle clamped to +-MAX_BOUNCE_DEG.
+2. **Homing:** while the main ball moves up (`v.y < 0`), its velocity turns toward the current direct target by at most `FINALE_TURN_DEG_S` (Lett 40, Vanlig 30 deg/s). The target is re-picked every 0.25 s with `aim_point(direct_only = true)`; no direct target means no homing. The 20 degree flat-floor rule is applied after the turn.
+3. Remaining bricks pulse their glow at 1 Hz (well under the flash limit); the music adds a rising filter sweep.
+4. Echo balls never aim or home.
+
+Sim effect (my calc): the last 3 bricks take 3.5-8.5 s in Vanlig instead of 15-22 s (boss levels excepted: there the boss itself is among the last bricks, and that is the fight).
+
+#### 15.3.4 Aim point with line of sight (used by aim assist 4.4 rule 5 AND the finale)
+
+`aim_point(from, direct_only)`:
+1. Sort alive breakable bricks (boss included) by distance from the ball centre.
+2. Return the first brick whose centre has a **clear path**: sample the segment from ball centre to brick centre every 10 px; the path is blocked only if the ball circle (radius 22) at a sample overlaps a non-breakable piece (chrome, switch, portal rim). Breakable bricks never block, because hitting any of them is progress.
+3. If none and not `direct_only`: try a **one-wall bank shot** for each brick in the same order: mirror the brick centre over x = 62 (left wall + radius) or x = 1018 (right wall - radius); the shot is valid if both legs (ball to wall point, wall point to brick) are clear. Aim at the mirrored point.
+4. If still none: no aim; the normal bounce and the dry-spell nudges take over.
+
+Why: in v1 the assist aims at the nearest brick even when a chrome post sits in between; the sim then bounced between paddle and chrome for 15 minutes on a chrome level (my calc, level 9 draft, 3 of 6 seeds).
+
+#### 15.3.5 Nova blast area
+
+A Nova blast hits every alive breakable brick or boss whose rect intersects the blast rect: 300 x 156 px centred on the Nova's centre (3 x 3 cells). On the grid that is exactly the 8 neighbours; it also defines hits on moving bricks and bosses. Delays as in 5.1 (0.15 s, chained Nova +0.35 s). A boss takes 1 damage per blast.
+
+#### 15.3.6 Mini-boss `K` (levels 5, 10, 15)
+
+- **Shape:** 3 x 2 cells. Map code `K` in the top-left cell, `+` in the other 5 cells. Hit box 292 x 96 px (same 4 px inset as bricks). Looks (graphic-designer): one big slab with a core ring in the middle and one notch per HP around the ring; a notch goes dark per hit, so health is a shape. No face that scares (my call for 4-year-olds).
+- **HP** (Lett / Vanlig): L5 10 / 14, L10 14 / 20, L15 20 / 30.
+- **Damage:** ball or echo contact 1 (the ball bounces); Komet 2 per contact, bounces, uses one brick of the Komet count; Nova blast 1; Neonpuls wave 1.
+- **Motion:** glides along its rows at `speed` (L5 60 / 90, L10 80 / 120 px/s), starting to the right, reversing at walls and at other bricks, like a Glider. L15's boss sits inside the march block and has no motion of its own.
+- **Phases:** phase 1 when HP <= floor(2/3 x max), phase 2 when HP <= floor(1/3 x max). Each phase change, once: a "roar" (low synth swell 0.6 s, the core ring brightens once, through the limiter), own glide speed x1.25, one capsule from the bonus pool at the boss's bottom centre, and if the level has `minions: true`, up to 4 Glass **minions** appear in the empty cells of the grid row just below the boss's bottom edge, columns (boss column - 1) to (boss column + 3), skipping cells that overlap a ball or a capsule. In a march level the minions join the march block (placed on the block's current offset). Minions fade in over 0.3 s, are solid at once and count for the clear. Under "Mindre bevegelse" they appear without the fade.
+- **Defeat:** the boss counts as 1 breakable brick. When it dies: 3 shard bursts staggered 0.15 s apart (limiter applies), a deep "whump", and if it is the last brick the normal last-brick slow-mo. Otherwise play continues.
+- **Lett:** same rules with lower HP and speed; the net is unlimited, so the boss can never "win".
+
+#### 15.3.7 March block "Marsj" (levels 11, 12, 14, 15)
+
+- Level field `march: {"rows": [first, last], "floor_y": px}`. Every piece in those rows at level start (any brick, chrome, the boss) belongs to the block and moves with it.
+- **Sideways:** `MARCH_SPEED` (Lett 40, Vanlig 70 px/s), starting to the right. When the outer edge of the block's leftmost or rightmost **alive** piece reaches x 44 or x 1036, the block reverses. Dead pieces do not count, so a narrowed block travels further.
+- **Step down:** at each reversal, if the lowest alive piece's bottom + 26 <= `floor_y`, the whole block moves down 26 px over 0.25 s. At the floor it keeps sliding but stops stepping. `floor_y` <= 1000 keeps at least 400 px between the block and the paddle top (1402), so it is never a reflex demand.
+- A piece moving into the ball uses the existing push-out rule (4.4).
+- Feel: a soft two-note "tick-tock" on each step down; bricks lean 3 degrees in the move direction (graphic-designer's call).
+
+#### 15.3.8 Mixed carriers and bonus pool
+
+`carriers`: list of power-up kinds, assigned to the level's carrier cells round-robin in reading order (r0 left to right, then r1 ...). `bonus_pool`: kinds used by combo capsules and boss phases. Kinds available in levels 1-15: `komet`, `ekko`, `bredvinge`, `neonpuls`. Same power-up again = refresh, not stack (5.2). Ekko with echoes alive: refresh their life to 10 s, no new balls.
+
+### 15.4 Numbers (paste into NbBalance; Lett / Vanlig)
+
+```
+# --- Action pass v2 (GDD 15) ---
+const COMBO_WINDOW_S_LETT: float = 3.0
+const COMBO_WINDOW_S_VANLIG: float = 2.0
+const COMBO_DROP_EVERY_LETT: int = 6
+const COMBO_DROP_EVERY_VANLIG: int = 8
+const COMBO_TIER_WARM: int = 5
+const COMBO_TIER_RUSH: int = 10
+const COMBO_SEGMENTS: int = 10
+const COMBO_METER_RECT: Rect2 = Rect2(290, 248, 750, 24)
+const COMBO_DRAIN_S: float = 0.3
+const NOTE_STEPS_MAX: int = 12            # was 8
+const SHARDS_WARM: int = 32
+const SHARDS_RUSH: int = 40
+const TRAIL_WARM_SCALE: float = 1.5
+const RUSH_SHAKE_PX: float = 3.0          # Vanlig only, off under less motion
+const RUSH_SHAKE_S: float = 0.06
+const RUSH_SHAKE_MAX_PER_S: int = 3
+const RUSH_RIM_FADE_S: float = 0.5
+const CHAIN_SLOWMO_BREAKS: int = 4
+const CHAIN_SLOWMO_WINDOW_S: float = 0.4
+const CHAIN_SLOWMO_SCALE: float = 0.5
+const CHAIN_SLOWMO_S: float = 0.25
+const CHAIN_SLOWMO_RETURN_S: float = 0.15
+const CHAIN_SLOWMO_COOLDOWN_S: float = 3.0
+
+const RAMP_PROGRESS_LETT: float = 0.0
+const RAMP_PROGRESS_VANLIG: float = 0.15  # replaces RAMP_STEP / RAMP_EVERY_S / RAMP_CAP
+
+const FINALE_LEFT_LETT: int = 4
+const FINALE_LEFT_VANLIG: int = 3
+const FINALE_MIN_START: int = 10
+const FINALE_TURN_DEG_S_LETT: float = 40.0
+const FINALE_TURN_DEG_S_VANLIG: float = 30.0
+const FINALE_RETARGET_S: float = 0.25
+const FINALE_PULSE_HZ: float = 1.0
+const AIM_LOS_STEP_PX: float = 10.0
+
+const NOVA_BLAST_W: float = 300.0
+const NOVA_BLAST_H: float = 156.0
+const NOVA_DELAY_S: float = 0.15
+const NOVA_CHAIN_DELAY_S: float = 0.35
+
+const GLIDER_SPEED_LETT: float = 80.0
+const GLIDER_SPEED_VANLIG: float = 120.0
+
+const MARCH_SPEED_LETT: float = 40.0
+const MARCH_SPEED_VANLIG: float = 70.0
+const MARCH_STEP_PX: float = 26.0
+const MARCH_STEP_S: float = 0.25
+const MARCH_WALL_GAP: float = 4.0
+const MARCH_FLOOR_MAX_Y: float = 1000.0
+
+const BOSS_W: float = 292.0
+const BOSS_H: float = 96.0
+const BOSS_PHASE_SPEEDUP: float = 1.25
+const BOSS_MINIONS_MAX: int = 4
+const BOSS_MINION_FADE_S: float = 0.3
+const BOSS_KOMET_DAMAGE: int = 2
+const BOSS_ROAR_S: float = 0.6
+const BOSS_DEATH_BURSTS: int = 3
+const BOSS_DEATH_STAGGER_S: float = 0.15
+
+const EKKO_BALLS: int = 2
+const EKKO_SPLIT_DEG: float = 20.0
+const EKKO_LIFE_S: float = 10.0
+const BALLS_MAX: int = 3
+const BREDVINGE_SCALE_LETT: float = 1.3
+const BREDVINGE_SCALE_VANLIG: float = 1.5
+const BREDVINGE_S_LETT: float = 20.0
+const BREDVINGE_S_VANLIG: float = 15.0
+const BREDVINGE_GROW_S: float = 0.3
+const NEONPULS_WAVES: int = 6
+const NEONPULS_INTERVAL_S: float = 1.0
+```
+Per-level values (speeds, boss HP and speed, march floor) live in the level data (15.8), not here.
+
+### 15.5 Feel additions
+
+| Event | Visual | Sound | Haptic (if on) | Mindre bevegelse |
+|---|---|---|---|---|
+| Combo step | Meter segment lights (80 ms scale pop 1.0 -> 1.15 -> 1.0) | Pentatonic step (15.3.1) | none | No scale pop |
+| Enter Varm (5) | Trail lengthens over 0.2 s | Soft sub thump joins | none | same |
+| Enter Neonrush (10) | Meter outline glows, field rim shifts warm over 0.3 s (steady) | Hi-hat layer fades in over 1 bar | 20 ms | same, no shake |
+| Combo capsule | Capsule pops out with a small ring (200 ms) | Two-note chime | none | No ring |
+| Combo drops | Meter drains right to left, 0.3 s | none (silence is the cue) | none | Instant |
+| Chain slow-mo | Time 0.5x for 0.25 s | Music low-pass for the same time | none | Kept |
+| Boss hit | Boss squash 95% for 80 ms, one notch goes dark, spark at contact | Heavy "dunk", pitch up per notch lost | 15 ms | No squash |
+| Boss phase roar | Core ring brightens once (limiter), minions fade in | Low swell 0.6 s | 30 ms | No fade |
+| Boss defeat | 3 shard bursts 0.15 s apart, core ring implodes 0.4 s | Deep whump + rising arpeggio | 40 ms | No implode, bursts kept |
+| March step down | Bricks lean 3 deg in move direction | Tick-tock | none | No lean |
+| Finale on | Remaining bricks pulse 1 Hz | Filter riser over the music | none | Pulse kept (it is 1 Hz) |
+| Echo split | Two translucent balls fan out at +-20 deg | Triple "pip" | 12 ms | same |
+
+### 15.6 Level table, levels 1-15 (replaces 6.3)
+
+Sim columns are (my calc): `tools/action_sim.py --runs 80`, near-perfect paddle bot, unlimited net, chain slow-mo not modelled. Real children are slower; treat them as floors. Restart chance (Vanlig, charged-net levels) is a design target (guess) for the owner's phone test. Boss counts as 1 brick in "Breakable". Net: inf = unlimited (Lett is always inf).
+
+| # | W | Name | New | Breakable | Other | Carriers (in order) | Bonus pool | Lett / Vanlig speed | Vanlig paddle | Vanlig net | Median Lett / Vanlig | p90 Lett / Vanlig | Breaks/s Vanlig | Longest gap Vanlig | Restart chance Vanlig |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | Første lys | Glass + Komet | 32 | | komet x2 | komet | 520 / 720 | 280 | inf | 59 / 46 s | 88 / 67 s | 0.74 | 5.3 s | 0 |
+| 2 | 1 | To prikker | Double | 48 | | komet x2 | komet | 520 / 720 | 280 | inf | 72 / 59 s | 123 / 96 s | 0.86 | 7.9 s | 0 |
+| 3 | 1 | Supernova | Nova | 52 | | komet x2 | komet | 520 / 720 | 280 | inf | 57 / 46 s | 102 / 79 s | 1.21 | 7.5 s | 0 |
+| 4 | 1 | Ekko | Ekko | 42 | | ekko x2 | komet, ekko | 520 / 720 | 280 | inf | 44 / 54 s | 72 / 82 s | 0.82 | 5.6 s | 0 |
+| 5 | 1 | Solkjernen | Boss (HP 10 / 14) | 22 + boss | | ekko, komet | komet, ekko | 520 / 720 | 280 | inf | 34 / 32 s | 49 / 48 s | 0.80 | 7.7 s | 0 |
+| 6 | 2 | Trekant | Triple | 32 | | komet, ekko | komet, ekko | 530 / 760 | 280 | 3 | 44 / 35 s | 62 / 57 s | 1.01 | 5.6 s | 5% (guess) |
+| 7 | 2 | Rushtid | Glider | 36 | | ekko, komet | komet, ekko | 530 / 760 | 280 | 3 | 37 / 41 s | 78 / 75 s | 0.94 | 6.7 s | 8% (guess) |
+| 8 | 2 | Vingene | Bredvinge | 42 | | bredvinge x2 | komet, ekko, bredvinge | 530 / 760 | 280 | 3 | 69 / 69 s | 112 / 90 s | 0.64 | 7.2 s | 6% (guess) |
+| 9 | 2 | Gatelys | Chrome | 34 | 2 C | bredvinge, komet | komet, ekko, bredvinge | 530 / 760 | 280 | 3 | 49 / 54 s | 102 / 88 s | 0.67 | 9.8 s | 8% (guess) |
+| 10 | 2 | Nattaxi | Boss + minions (HP 14 / 20) | 22 + boss (+ up to 8 minions) | | bredvinge, ekko | komet, ekko, bredvinge | 530 / 760 | 280 | inf | 50 / 51 s | 78 / 81 s | 0.62 | 8.8 s | 0 |
+| 11 | 3 | Invasjon | March block | 30 | | ekko, komet | komet, ekko, bredvinge | 540 / 800 | 260 | 3 | 36 / 36 s | 62 / 56 s | 0.90 | 5.6 s | 8% (guess) |
+| 12 | 3 | Kjedereaksjon | March + Nova chains | 40 | | komet, ekko | komet, ekko, bredvinge | 540 / 800 | 260 | 3 | 31 / 29 s | 45 / 52 s | 1.51 | 3.7 s | 8% (guess) |
+| 13 | 3 | Neonpuls | Neonpuls | 54 | | neonpuls x2 | komet, ekko, neonpuls | 540 / 800 | 260 | 3 | 35 / 37 s | 83 / 79 s | 1.57 | 6.0 s | 10% (guess) |
+| 14 | 3 | Flipper | March + chrome + glider | 35 | 4 C | ekko, neonpuls | komet, ekko, bredvinge, neonpuls | 540 / 800 | 260 | 3 | 23 / 25 s | 32 / 50 s | 1.58 | 4.2 s | 12% (guess) |
+| 15 | 3 | Arkadekongen | Boss inside a march block (HP 20 / 30) | 32 + boss (+ minions) | | neonpuls, ekko | komet, ekko, bredvinge, neonpuls | 540 / 800 | 260 | inf | 26 / 29 s | 38 / 49 s | 1.58 | 4.1 s | 0 |
+
+Per-level boss and march data: L5 boss speed 60 / 90, no minions. L10 boss speed 80 / 120, minions. L11 and L12 march rows r1-r5, floor 1000. L14 march r1-r5, floor 900. L15 march r1-r5 (boss included, no own motion), floor 800, minions.
+
+Level 1 for a 4-year-old: 32 low bricks and two Komet carriers in r5, so the first capsule falls after a median 18.5 s in Lett and 15.6 s in Vanlig (my calc, 60 runs), and the Lett magnet hands it over. Level 14 is short (23-25 s) on purpose: a fast "flipper" level right before the final boss.
+
+### 15.7 Maps, levels 1-15 (build these exactly)
+
+Format as before: 10 characters per row = columns c0-c9, rows from r0 (top, y 340) down, rows not listed are empty. Codes: `G` Glass, `D` Double, `T` Triple, `N` Nova, `M` Glider, `C` Chrome, `K` boss anchor, `+` boss body, lowercase = carrier (kinds from the `carriers` list in reading order). These are the exact strings the sim ran.
+
+**Level 1: Første lys** (carriers: komet in reading order; bonus pool: komet)
+```
+r0 ..........
+r1 ..........
+r2 ..........
+r3 .GGGGGGGG.
+r4 GGGGGGGGGG
+r5 .GGgGGgGG.
+r6 ..GGGGGG..
+```
+Low, wide wall. The two carriers in r5 sit where the first bounces land, so a Komet falls after a median 15-19 s (my calc).
+
+**Level 2: To prikker** (carriers: komet in reading order; bonus pool: komet)
+```
+r0 ..........
+r1 ..........
+r2 .GGGGGGGG.
+r3 GDDGGGGDDG
+r4 GDDGGGGDDG
+r5 GGGGggGGGG
+r6 .GG....GG.
+r7 ..GGGGGG..
+```
+A face: two blocks of Doubles are the eyes, r6-r7 the smile. The carriers sit in the chin row.
+
+**Level 3: Supernova** (carriers: komet in reading order; bonus pool: komet)
+```
+r0 ..........
+r1 ..........
+r2 GGGGGGGGGG
+r3 GGNGGGGNGG
+r4 GGGGGGGGGG
+r5 GDGGNNGGDG
+r6 GGGGGGGGGG
+r7 ..g....g..
+```
+Four Novas sit inside a solid wall, so any hit near them sets off a 3x3 blast and often a chain. Komet through the Nova row is the big moment.
+
+**Level 4: Ekko** (carriers: ekko in reading order; bonus pool: komet, ekko)
+```
+r0 ..........
+r1 ..........
+r2 DDDDDDDDDD
+r3 GGNGGGGNGG
+r4 GGGGDDGGGG
+r5 .GGGGGGGG.
+r6 ..........
+r7 ..gG..Gg..
+```
+A Double roof over a Nova-salted wall. Two Ekko carriers hang low; three balls in a dense wall is the action peak of world 1.
+
+**Level 5: Solkjernen** (carriers: ekko, komet in reading order; bonus pool: komet, ekko; boss HP 10 / 14, speed 60 / 90, minions no)
+```
+r0 ..........
+r1 ...K++....
+r2 ...+++....
+r3 ..........
+r4 .GGGGGGGG.
+r5 .DDGNNGDD.
+r6 ..........
+r7 ..gGGGGg..
+```
+Solkjernen glides in its own lane (r1-r2) above a shield of Glass and Doubles. Novas in r5 open a hole; Komet ploughs up to it.
+
+**Level 6: Trekant** (carriers: komet, ekko in reading order; bonus pool: komet, ekko)
+```
+r0 ..........
+r1 ..........
+r2 ....TT....
+r3 ...TNNT...
+r4 ..TGGGGT..
+r5 .TGGNNGGT.
+r6 TGGGGGGGGT
+r7 ..t....t..
+```
+A pyramid of Triples with Novas inside: Nova blasts chip the Triples, so the slow 3-hit bricks still fall fast.
+
+**Level 7: Rushtid** (carriers: ekko, komet in reading order; bonus pool: komet, ekko)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GNGGTTGGNG
+r3 GGGGGGGGGG
+r4 ..........
+r5 .M...M...m
+r6 ..........
+r7 m...M...M.
+```
+Six Gliders (two carry capsules) cross under a Nova wall. Moving targets in the open lower field.
+
+**Level 8: Vingene** (carriers: bredvinge in reading order; bonus pool: komet, ekko, bredvinge)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GTGGNNGGTG
+r3 GNGGGGGGNG
+r4 .GGGDDGGG.
+r5 ..........
+r6 .M..gg..M.
+```
+Two Bredvinge carriers between two Gliders in r6; a wide paddle meets a Triple-cornered wall with a Nova pair.
+
+**Level 9: Gatelys** (carriers: bredvinge, komet in reading order; bonus pool: komet, ekko, bredvinge)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GNGGTTGGNG
+r3 GGGGGGGGGG
+r4 ..........
+r5 ..C....C..
+r6 ..........
+r7 .g.M..M.g.
+```
+Chrome posts (only two, under c2 and c7) deflect but enclose nothing. Two Gliders and two carriers in r7.
+
+**Level 10: Nattaxi** (carriers: bredvinge, ekko in reading order; bonus pool: komet, ekko, bredvinge; boss HP 14 / 20, speed 80 / 120, minions yes)
+```
+r0 ..........
+r1 ...K++....
+r2 ...+++....
+r3 ..........
+r4 ..........
+r5 GTGGNNGGTG
+r6 .GGGGGGGG.
+r7 ..........
+r8 .g..GG..g.
+```
+Nattaxi glides fast in r1-r2. Its first phase change drops 4 Glass minions into the empty r3 under it. A Nova pair in r5 helps punch up.
+
+**Level 11: Invasjon** (carriers: ekko, komet in reading order; bonus pool: komet, ekko, bredvinge; march rows r1-r5, floor_y 1000)
+```
+r0 ..........
+r1 ..GGGGGG..
+r2 ..GNGGNG..
+r3 ..TGGGGT..
+r4 ..GGGGGG..
+r5 ..GgGGgG..
+```
+A 6-wide march block (r1-r5). Carriers in its bottom row fall first as the block comes down.
+
+**Level 12: Kjedereaksjon** (carriers: komet, ekko in reading order; bonus pool: komet, ekko, bredvinge; march rows r1-r5, floor_y 1000)
+```
+r0 ..........
+r1 .GNGGGGNG.
+r2 .GGTNNTGG.
+r3 .NGGGGGGN.
+r4 .GGGTTGGG.
+r5 .GGgGGgGG.
+```
+An 8-wide march block with six Novas: chains run through the whole block. It only travels 200 px sideways, so it steps down often.
+
+**Level 13: Neonpuls** (carriers: neonpuls in reading order; bonus pool: komet, ekko, neonpuls)
+```
+r0 ..........
+r1 TGGGGGGGGT
+r2 GGNGTTGNGG
+r3 TGGGGGGGGT
+r4 GGGGNNGGGG
+r5 DDGGGGGGDD
+r6 ..........
+r7 M...nn...M
+```
+The densest level (54): a full wall with Novas and Triples, Gliders at both ends of r7, and two Neonpuls carriers that are Novas themselves.
+
+**Level 14: Flipper** (carriers: ekko, neonpuls in reading order; bonus pool: komet, ekko, bredvinge, neonpuls; march rows r1-r5, floor_y 900)
+```
+r0 ..........
+r1 ..TGNNGT..
+r2 ..GGGGGG..
+r3 ..GNTTNG..
+r4 ..GGGGGG..
+r5 ..DGGGGD..
+r6 C...M....C
+r7 ..........
+r8 .gC.GG.Cg.
+```
+A short, fast level: a 6-wide march block, chrome bumpers at the walls in r6 and r8, one Glider.
+
+**Level 15: Arkadekongen** (carriers: neonpuls, ekko in reading order; bonus pool: komet, ekko, bredvinge, neonpuls; boss HP 20 / 30, speed 0 / 0, minions yes; march rows r1-r5, floor_y 800)
+```
+r0 ..........
+r1 ...K++....
+r2 .T.+++..T.
+r3 .GNGGGGNG.
+r4 .GGGTTGGG.
+r5 .DGGGGGGD.
+r6 ..........
+r7 ..gGNNGg..
+```
+Arkadekongen rides inside a march block (r1-r5) with Triples beside it and a Nova row under it. Phase changes refill holes in r3 with minions. The block stops stepping at y 800.
+
+### 15.8 Level data format additions
+
+Keep `rows`, `lett_speed`, `vanlig_speed`, `vanlig_paddle`, `vanlig_net` (0 = unlimited). New keys:
+
+| Key | Type | Example | Notes |
+|---|---|---|---|
+| `world` | int | 2 | Drives the map page and the colour ramp |
+| `carriers` | Array[String] | `["bredvinge", "komet"]` | Replaces `carrier_powerup` (keep reading it as a fallback: `[carrier_powerup]`) |
+| `bonus_pool` | Array[String] | `["komet", "ekko"]` | Combo capsules and boss phases |
+| `boss` | Dictionary or absent | `{"hp": [14, 20], "speed": [80, 120], "minions": true}` | Pairs are Lett, Vanlig. Speed 0 = no own motion |
+| `march` | Dictionary or absent | `{"rows": [1, 5], "floor_y": 1000}` | Speed and step from NbBalance |
+
+Colour ramps for worlds 2 and 3 belong to graphic-designer (DESIGN.md). Until they exist, use the world 1 ramp rotated by one step per world so levels at least differ (placeholder, my call).
+
+### 15.9 Later phase: levels 16-30 (not in this build)
+
+Outline only; maps and sim come after the owner has played 1-15 on the phone. Speeds: Lett 550 / 560 / 570, Vanlig 830 / 860 / 880 for worlds 4 / 5 / 6. Vanlig paddle 260 / 240 / 240. Every 5th level is a boss with unlimited net.
+
+| # | W | Name (working) | New / focus |
+|---|---|---|---|
+| 16 | 4 | Bryteren | Switch + Ghost |
+| 17 | 4 | Skyggemarsj | Ghost rows inside a march block |
+| 18 | 4 | Saktetid | Saktetid (a help now that Vanlig is fast) |
+| 19 | 4 | Filskifte | Gliders + ghosts + chrome gates |
+| 20 | 4 | Lastebilen | Boss with a ghost shield that a switch toggles |
+| 21 | 5 | Ormehull | Portal pair |
+| 22 | 5 | Krystallbuer | Portals + gliders |
+| 23 | 5 | Skjoldnett | Skjoldnett |
+| 24 | 5 | Labyrint | Portals + switch + march |
+| 25 | 5 | Krystallhjertet | Boss that jumps between two portal spots at each phase |
+| 26-29 | 6 | Stjerneporten 1-4 | Remixes, two march blocks moving in opposite directions, one new element (open question 8) |
+| 30 | 6 | Neonnova | Final boss, 3 phases (march, minions, Nova ring around it) |
+
+### 15.10 Builder scope for one session (godot-android-dev)
+
+Ship in this order; each step leaves a playable build, so if the session runs out the next session starts at the first unfinished step.
+
+1. **Core action systems** on the existing slice: combo meter, tiers, combo capsules, chain slow-mo, progress ramp (remove the time ramp), finale helper, line-of-sight `aim_point` used by both the assist and the finale. `NOTE_STEPS_MAX` 12.
+2. **World 1 v2**: replace the 5 world 1 maps with 15.7 levels 1-5; add `carriers` / `bonus_pool`; Nova (blast rect 15.3.5); Ekko (multi-ball: up to 3 balls in NbSim; echoes never spend net charges, never aim or home); boss `K` with phases (no minions yet needed for L5). Raise Vanlig world 1 speed to 720.
+3. **World 2**: Triple, Glider, Bredvinge, boss minions; levels 6-10; world 2 map page with the arrow discs from 8.1; charged net on levels 6-9.
+4. **World 3**: march block, Neonpuls; levels 11-15; world 3 map page.
+
+Placeholders allowed this session (graphic-designer follows up): boss = scaled brick body with a ring of notch quads; echo ball = ball mesh at 50% alpha; capsule icons per kind as simple shape decals (Komet tail, three circles, winged paddle, paddle with arcs); world 2-3 backgrounds = the world 1 scene with a tint.
+
+Update `tools/action_sim.py` maps if a map changes, rerun it, and paste the new medians into 15.6.
+
+**Acceptance for game-qa** (headless where possible):
+- Sim parity: NbSim bot medians for levels 1-15 within +-35% of the 15.6 Vanlig medians (different bot, same rules).
+- No level in either setting has a run over 300 s in 20 seeds (catches trap layouts like the draft level 9).
+- Longest gap between breaks: Vanlig median under 10 s on every level.
+- Flash limiter: at most 3 glow spikes in any 1 s window during a Nova chain in level 12 and a boss phase change in level 10.
+- March floor: no march piece bottom ever below y 1000 (log check, levels 11, 12, 14, 15).
+- Ekko: an echo ball falling past the net never spends a charge (level 6 with forced Ekko).
+- Lett: no game over, no shake, unlimited net on all 15 levels; kids walk-through of level 1 still passes with sound off.
+- `full_unlock == false` still shows only levels 1-3 (owner rule).
+
+### 15.11 Open questions (action pass)
+
+5. **Boss levels as the 5th level:** the old 5th level was a calm breather. I made it a boss fight that keeps the breather's safety (unlimited net, more capsules). OK, or keep a calm breather and move the boss to level 4?
+6. **Komet in level 1:** a capsule in the very first level gives action early but is one more thing for a 4-year-old. With the Lett magnet it needs no skill. OK?
+7. **Combo shake in Vanlig:** 3 px per break at combo 10+, at most 3 per second. Keep, or no shake at all outside the last brick?
+8. **World 6 new element:** levels 26-30 have no new brick yet. Ideas: a "Splitter" brick that breaks into two small falling Glass bricks the ball can still hit, or a "Magnet" brick that bends the ball's path when it passes. Pick one, or none?
