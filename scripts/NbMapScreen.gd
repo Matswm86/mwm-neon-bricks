@@ -7,11 +7,14 @@ extends Control
 ## dots between them show the page as a shape. No padlocks: every visible
 ## level can be picked; the lowest uncleared one pulses. With full_unlock
 ## false only world 1 levels 1-3 exist (no arrows). Stand-alone only: a gear
-## disc at the top-right opens the settings.
+## disc at the top-right opens the settings. With the full game and world 1
+## cleared, a last page "Neonveien" (endless, GDD 16.9) offers two discs:
+## continue from the best level reached (big, orange) and start at 1.
 
 signal level_chosen(level_id: int)
 signal settings_pressed
 signal world_changed(world: int)
+signal endless_chosen(k: int)
 
 const ROAD := Color(1.000, 0.180, 0.533)
 const ROAD_CORE := Color(1.0, 0.75, 0.88)
@@ -39,6 +42,9 @@ var arrow_right: NbDisc
 var _discs: Array[NbLevelDisc] = []
 var _safe_dy: float = 0.0
 var _pages: int = 1
+var _endless_page: int = 0
+var _cont: NbDisc
+var _start: NbDisc
 
 
 func _ready() -> void:
@@ -51,6 +57,23 @@ func _ready() -> void:
 	add_child(gear)
 	arrow_left = _arrow("left", 160.0)
 	arrow_right = _arrow("right", 920.0)
+	_cont = NbDisc.new()
+	_cont.icon = "next"
+	_cont.fill = NbDisc.NEXT
+	_cont.disc_radius = 120.0
+	_cont.size = Vector2(260, 260)
+	_cont.position = Vector2(540, 900) - _cont.size * 0.5
+	_cont.tapped.connect(
+		func() -> void: endless_chosen.emit(maxi(1, (NeonBricks as NbState).endless_best))
+	)
+	add_child(_cont)
+	_start = NbDisc.new()
+	_start.icon = "replay"
+	_start.disc_radius = 100.0
+	_start.size = Vector2(240, 240)
+	_start.position = Vector2(540, 1260) - _start.size * 0.5
+	_start.tapped.connect(func() -> void: endless_chosen.emit(1))
+	add_child(_start)
 	arrow_left.tapped.connect(func() -> void: show_page(page - 1))
 	arrow_right.tapped.connect(func() -> void: show_page(page + 1))
 	set_safe_dy(0.0)
@@ -95,11 +118,17 @@ func refresh() -> void:
 	var suggest: int = st.suggested_level()
 	var ids: Array[int] = st.visible_levels()
 	_pages = maxi(1, NbLevels.world_of(ids[ids.size() - 1])) if not ids.is_empty() else 1
+	_endless_page = _pages + 1 if st.endless_available() else 0
+	if _endless_page > 0:
+		_pages += 1
 	page = clampi(page, 1, _pages)
+	var endless: bool = page == _endless_page
+	_cont.visible = endless
+	_start.visible = endless
 	arrow_left.visible = _pages > 1 and page > 1
 	arrow_right.visible = _pages > 1 and page < _pages
 	for id: int in ids:
-		if NbLevels.world_of(id) != page:
+		if endless or NbLevels.world_of(id) != page:
 			continue
 		var d := NbLevelDisc.new()
 		d.level_id = id
@@ -115,8 +144,17 @@ func refresh() -> void:
 		add_child(d)
 		_discs.append(d)
 	gear.visible = not st.in_shell()
-	world_changed.emit(page)
+	world_changed.emit(6 if endless else page)
 	queue_redraw()
+
+
+func show_endless() -> void:
+	if _endless_page > 0:
+		show_page(_endless_page)
+
+
+func is_endless_page() -> bool:
+	return _endless_page > 0 and page == _endless_page
 
 
 func disc_for(id: int) -> NbLevelDisc:
@@ -145,6 +183,9 @@ func _draw() -> void:
 				draw_circle(c, 16.0, DOT)
 			else:
 				draw_arc(c, 14.0, 0.0, TAU, 24, DOT, 4.0, true)
+	if is_endless_page():
+		_draw_endless_road()
+		return
 	var n: int = _discs.size()
 	if n < 2:
 		return
@@ -164,3 +205,17 @@ func _draw() -> void:
 	draw_polyline(curve, Color(ROAD.r, ROAD.g, ROAD.b, 0.22), 46.0, true)
 	draw_polyline(curve, Color(ROAD.r, ROAD.g, ROAD.b, 0.85), 14.0, true)
 	draw_polyline(curve, ROAD_CORE, 4.0, true)
+
+
+## Endless page: a neon road running into the distance behind the two
+## discs (no text: the road is the "endless" cue).
+func _draw_endless_road() -> void:
+	var top := Vector2(540, 470)
+	for side: float in [-1.0, 1.0]:
+		var a := Vector2(540 + side * 330.0, 1430)
+		draw_line(a, top + Vector2(side * 16.0, 0), Color(ROAD.r, ROAD.g, ROAD.b, 0.85), 10.0, true)
+	for k: int in 6:
+		var t: float = float(k) / 6.0
+		var y: float = lerpf(1400.0, 500.0, sqrt(t))
+		var w: float = lerpf(26.0, 6.0, t)
+		draw_line(Vector2(540, y), Vector2(540, y - w * 1.6), ROAD_CORE, w * 0.5, true)

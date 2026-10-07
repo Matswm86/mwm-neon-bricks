@@ -65,6 +65,13 @@ func play_level(_level_id: int) -> void:
 	_switch(TRACK)
 
 
+## Saktetid slows the tape: pitch_scale on both players (1 = normal).
+func set_pitch(p: float) -> void:
+	for pl: AudioStreamPlayer in _players:
+		if not is_equal_approx(pl.pitch_scale, p):
+			pl.pitch_scale = p
+
+
 ## Slider value 0..1 (linear); takes effect at once, also mid-fade.
 func set_volume(v: float) -> void:
 	_vol_db = linear_to_db(maxf(v, 0.001))

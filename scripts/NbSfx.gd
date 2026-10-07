@@ -40,6 +40,8 @@ const WIN_DUCK_S: float = 3.0
 const BASE_DB: float = -10.0
 
 var enabled: bool = true
+## Saktetid pitch on every effect (GDD 16.2.2), 1 = normal.
+var pitch_mul: float = 1.0
 ## Effects slider, 0..1 (linear), from NeonBricks.sfx_volume.
 var volume: float = 1.0
 var _streams: Dictionary = {}
@@ -78,7 +80,8 @@ func play(name: String, pitch: float = 1.0, vol_db: float = 0.0) -> void:
 	var p: AudioStreamPlayer = _players[_next]
 	_next = (_next + 1) % _players.size()
 	p.stream = list[_rng.randi() % list.size()]
-	p.pitch_scale = clampf(pitch * (1.0 + _rng.randf_range(-spread, spread)), 0.25, 4.6)
+	var ps: float = pitch * pitch_mul * (1.0 + _rng.randf_range(-spread, spread))
+	p.pitch_scale = clampf(ps, 0.25, 4.6)
 	p.volume_db = vol_db + BASE_DB + linear_to_db(volume)
 	p.play()
 	if name == "win":

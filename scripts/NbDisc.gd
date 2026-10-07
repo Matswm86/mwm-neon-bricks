@@ -201,6 +201,11 @@ static func draw_level_picture(
 			var ch: String = s[c]
 			if ch == "." or ch == "+":
 				continue
+			if ch == "1" or ch == "2":
+				var pc: Vector2 = origin + Vector2(cell.x * (c + 0.5), cell.y * (r - first + 0.5))
+				var pcol := Color(0.612, 1.0, 0.784) if ch == "1" else Color(1.0, 0.824, 0.478)
+				ci.draw_arc(pc, cell.y * 0.42, 0.0, TAU, 16, pcol, maxf(1.0, cell.x * 0.1))
+				continue
 			var col: Color = NbLevels.cell_color(ch.to_upper(), colors.get(r, WHITE))
 			if ch == "K":
 				var br := Rect2(

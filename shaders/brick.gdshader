@@ -1,8 +1,14 @@
 shader_type spatial;
 // One shader for every brick in one MultiMesh (DESIGN 7a/7b, GDD 15).
 // INSTANCE_CUSTOM: x = type (0 glass, 1 double, 2 chrome, 3 triple, 4 nova,
-// 5 glider, 6 boss), y = hits left, z = carrier (1 = star inlay; boss: max
-// HP), w = fade 0..1, or 1 + glow 0..1 (assist hint, finale pulse, roar).
+// 5 glider, 6 boss, 7 switch, 8 magnet), y = hits left (switch: 1 = can
+// flip, 0 = dark in the finale), z = carrier (1 = star inlay; boss: max HP;
+// switch: 1 = set A solid), w = fade 0..1, or 1 + glow 0..1 (assist hint,
+// finale pulse, roar, switch pop, magnet near a ball).
+// Switch (DESIGN 12.1): dark steel, no rim, a domed button with a bezel and
+// the power symbol, a square mark (set A) and a round mark (set B); the mark
+// of the solid set is lit. Magnet (GDD 16.2.5): ring with four inward
+// chevrons, two break on the first hit; faint field lines turn 0.25 rev/s.
 // Shape cues so colour is never the only cue: triple = three dots in a
 // triangle, nova = four-point star, glider = chevrons at both ends, boss =
 // core ring with one notch per HP (a notch goes dark per hit). The boss is
@@ -21,6 +27,10 @@ uniform float body_emit = 0.45;
 uniform float dot_energy = 3.0;
 uniform float star_energy = 4.0;
 uniform float dim = 1.0;
+uniform vec3 switch_body : source_color = vec3(0.227, 0.251, 0.322);
+uniform vec3 switch_btn : source_color = vec3(0.102, 0.110, 0.149);
+uniform vec3 switch_off : source_color = vec3(0.290, 0.310, 0.376);
+uniform float less_motion = 0.0;
 
 varying vec3 lp;
 varying vec3 ln;
@@ -102,6 +112,37 @@ void fragment() {
 		metal = 1.0;
 		rough = mix(0.22, 0.4, bolt);
 		coat = 0.0;
+	} else if (kind == 7) {
+		bool can = hits > 0;
+		bool a_solid = cd.z > 0.5;
+		alb = switch_body;
+		metal = 0.8;
+		rough = 0.30;
+		coat = 0.0;
+		float r = length(p);
+		float btn = fill(r - 0.15, aa) * front;
+		alb = mix(alb, switch_btn, btn);
+		float bez = fill(abs(r - 0.158) - 0.008, aa) * front;
+		alb = mix(alb, chrome_col, bez);
+		metal = mix(metal, 1.0, bez);
+		coat = btn;
+		// Power symbol: open ring (gap at the top) + bar.
+		float ang = atan(p.x, p.y);
+		float ring = fill(abs(r - 0.085) - 0.014, aa) * step(0.55, abs(ang));
+		float bar = fill(sd_segment(p, vec2(0.0, 0.02), vec2(0.0, 0.11)) - 0.014, aa);
+		float sym = max(ring, bar) * front;
+		float e_sym = can ? 3.5 * (1.0 + glow) : 0.0;
+		alb = mix(alb, can ? dot_col : switch_off, sym);
+		emi = mix(emi, dot_col * e_sym, sym);
+		// Set marks: square = A at x -0.33, dot = B at x +0.33.
+		float sq = fill(max(abs(p.x + 0.33), abs(p.y)) - 0.045, aa) * front;
+		float dt = fill(length(p - vec2(0.33, 0.0)) - 0.05, aa) * front;
+		bool lit_a = can && a_solid;
+		bool lit_b = can && !a_solid;
+		alb = mix(alb, lit_a ? dot_col : switch_off, sq);
+		emi = mix(emi, lit_a ? dot_col * 3.5 : vec3(0.0), sq);
+		alb = mix(alb, lit_b ? dot_col : switch_off, dt);
+		emi = mix(emi, lit_b ? dot_col * 3.5 : vec3(0.0), dt);
 	} else if (kind == 6) {
 		// Boss: slab with a rim, a core ring and a ring of HP notches.
 		vec2 q = p * vec2(3.174, 2.182);
@@ -183,10 +224,46 @@ void fragment() {
 			mark = max(mark, ch * front);
 			mark_emi = dot_col * dot_energy;
 		}
+		if (kind == 8) {
+			// Magnet: ring + four inward chevrons; first hit breaks two.
+			float r = length(p);
+			float ring = fill(abs(r - 0.075) - 0.016, aa);
+			float ch = 0.0;
+			vec2 dirs[4] = { vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0) };
+			float rad[4] = { 0.20, 0.20, 0.145, 0.145 };
+			for (int i = 0; i < 4; i++) {
+				if (hits < 2 && (i == 0 || i == 2)) {
+					continue;
+				}
+				vec2 dd = dirs[i];
+				vec2 nn = vec2(-dd.y, dd.x);
+				vec2 tip = dd * (rad[i] - 0.035);
+				vec2 back = dd * rad[i];
+				float c1 = sd_segment(p, tip, back + nn * 0.04);
+				float c2 = sd_segment(p, tip, back - nn * 0.04);
+				ch = max(ch, fill(min(c1, c2) - 0.013, aa));
+			}
+			// Field lines: six faint spokes turning 0.25 rev/s (static
+			// under "Mindre bevegelse"), low contrast, never flashing.
+			float spin = TIME * 1.5708 * (1.0 - less_motion);
+			float fa = atan(p.y, p.x) + spin;
+			float spoke = fill(abs(fract(fa * 6.0 / 6.2831853) - 0.5) * 1.047 * r - 0.004, aa);
+			spoke *= smoothstep(0.09, 0.11, r) * (1.0 - smoothstep(0.17, 0.19, r));
+			emi += mix(col, vec3(1.0), 0.5) * spoke * front * (0.6 + glow * 1.4);
+			mark = max(mark, max(ring, ch) * front);
+			mark_emi = dot_col * dot_energy;
+			if (hits < 2) {
+				float cr = sd_segment(p, vec2(0.10, 0.12), vec2(0.13, 0.02));
+				cr = min(cr, sd_segment(p, vec2(0.13, 0.02), vec2(0.09, -0.06)));
+				float crack = fill(cr - 0.008, aa) * front;
+				alb = mix(alb, vec3(0.05, 0.02, 0.06), crack);
+				emi = mix(emi, vec3(0.0), crack);
+			}
+		}
 		if (carrier) {
 			float sr = kind == 1 ? 0.085 : 0.12;
 			vec2 sc = vec2(0.0);
-			if (kind == 3 || kind == 4) {
+			if (kind == 3 || kind == 4 || kind == 8) {
 				sr = 0.07;
 				sc = vec2(0.30, 0.0);
 			}

@@ -17,15 +17,19 @@ var suggested: bool = false
 var _pulse_t: float = 0.0
 
 
+## Only the suggested disc animates (its 1 Hz pulse); the others redraw on
+## press only, like a plain NbDisc (QA 2026-10-06 finding 9).
 func _ready() -> void:
 	super._ready()
-	set_process(true)
+	set_process(suggested)
 
 
 func _process(delta: float) -> void:
 	_press_t += delta
 	_pulse_t += delta
 	queue_redraw()
+	if not suggested and _press_t > 0.12 and not _down:
+		set_process(false)
 
 
 func _draw() -> void:

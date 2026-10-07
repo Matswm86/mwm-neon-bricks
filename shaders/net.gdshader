@@ -14,6 +14,8 @@ uniform float lattice_energy = 1.2;
 uniform float pips = -1.0;
 // fading pip (the one just spent), 1 -> 0
 uniform float pip_out = 0.0;
+// Skjoldnett: the newest pip weaves in, 0 -> 1 over 0.4 s.
+uniform float pip_in = 1.0;
 uniform float ripple_x = 0.0;
 uniform float ripple_t = 9.0;
 uniform float less_motion = 0.0;
@@ -65,9 +67,11 @@ void fragment() {
 				break;
 			}
 			float cx = width_px * 0.5 + (fi - (total - 1.0) * 0.5) * 44.0;
-			float d = diamond(px - vec2(cx, ly), 13.0);
+			bool newest = fi > n - 1.5 && fi < n;
+			float grow = newest ? pip_in : 1.0;
+			float d = diamond(px - vec2(cx, ly - (1.0 - grow) * 30.0), 13.0 * max(grow, 0.05));
 			float m = 1.0 - smoothstep(-aa, aa, d);
-			float a = fi < n ? 1.0 : pip_out;
+			float a = fi < n ? grow : pip_out;
 			c = mix(c, vec3(3.0) * a, m * max(a, 0.0));
 		}
 	}

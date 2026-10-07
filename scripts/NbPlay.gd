@@ -8,6 +8,8 @@ extends Node
 
 signal map_requested
 signal level_started(id: int)
+## Level 30's "next": the endless page of the map (GDD 8.3).
+signal endless_requested
 
 ## Test bot: hold the paddle still this close above it (see bot_target).
 const BOT_HOLD_PX: float = 120.0
@@ -17,6 +19,7 @@ var autopilot: bool = false
 var force_charged_net: bool = false
 
 var sim: NbSim
+var music: NbMusic
 var world: NbWorld
 var sfx: NbSfx
 var level_id: int = 1
@@ -50,6 +53,8 @@ var _dragged: bool = false
 var _idle_t: float = 0.0
 var _auto_off: float = 0.0
 var _auto_rng := RandomNumberGenerator.new()
+## Saktetid pitch (GDD 16.2.2), applied to music and effects.
+var _pitch: float = 1.0
 
 
 func setup(
@@ -88,6 +93,10 @@ func setup(
 func start_level(id: int) -> void:
 	level_id = id
 	level_started.emit(id)
+	if sim:
+		sim.disconnect_all()
+	if id > NbLevels.ENDLESS_BASE:
+		NeonBricks.mark_endless(id - NbLevels.ENDLESS_BASE)
 	sim = NbSim.new()
 	sim.rng.randomize()
 	sim.setup(NbLevels.get_level(id), NeonBricks.easy, force_charged_net)
@@ -137,6 +146,10 @@ func stop() -> void:
 	resume_disc.visible = false
 	dim_rect.color = Color(0, 0, 0, 0)
 	world.reset_camera_fx()
+	_pitch = 1.0
+	sfx.pitch_mul = 1.0
+	if music:
+		music.set_pitch(1.0)
 
 
 func card_visible() -> bool:
@@ -168,6 +181,13 @@ func _connect_sim() -> void:
 	sim.march_stepped.connect(_on_march_step)
 	sim.finale_started.connect(func() -> void: sfx.play("zip", 0.7, -6.0))
 	sim.pulse_fired.connect(_on_pulse)
+	sim.ghosts_flipped.connect(_on_ghosts_flipped)
+	sim.ghost_warned.connect(_on_ghost_warned)
+	sim.switch_hit.connect(func(i: int) -> void: world.fx_switch(i, _limiter.allow(_clock_s)))
+	sim.portal_used.connect(_on_portal)
+	sim.shield_added.connect(_on_shield)
+	sim.boss_jump_started.connect(_on_boss_jump)
+	sim.nova_ring_added.connect(_on_nova_ring)
 
 
 # ---------------------------------------------------------------- loop
@@ -191,6 +211,7 @@ func _process(_delta: float) -> void:
 		_drive_autopilot()
 	if not _card_shown:
 		sim.step(game_dt)
+	_sync_pitch(real_dt)
 	world.sync(sim, real_dt, game_dt)
 	world.sync_camera(real_dt)
 	meter.set_combo(sim.combo)
@@ -235,6 +256,22 @@ func _chain_slowmo(real_dt: float) -> void:
 	else:
 		Engine.time_scale = 1.0
 		_chain_t = -1.0
+
+
+## Saktetid: music and effects pitch down over 0.3 s while the tape is slow
+## and wind back up over the last 0.5 s (follows the sim's slow factor).
+func _sync_pitch(real_dt: float) -> void:
+	var low: float = NbBalance.saktetid_pitch(sim.easy)
+	var sc: float = NbBalance.saktetid_scale(sim.easy)
+	var k: float = (1.0 - sim.slow_factor()) / (1.0 - sc)
+	var want: float = lerpf(1.0, low, clampf(k, 0.0, 1.0))
+	if want < _pitch:
+		_pitch = move_toward(_pitch, want, (1.0 - low) / 0.3 * real_dt)
+	else:
+		_pitch = want
+	sfx.pitch_mul = _pitch
+	if music:
+		music.set_pitch(_pitch)
 
 
 func _queue_sfx(delay_s: float, name: String, pitch: float, db: float) -> void:
@@ -452,14 +489,50 @@ func _on_boss_defeated(i: int, _pos: Vector2) -> void:
 		)
 
 
-func _on_march_step(_dir: int) -> void:
-	sfx.play("tick", 1.25, -6.0)
-	_queue_sfx(0.14, "tick", 0.9, -6.0)
+## Tick-tock; the second block plays it a fifth higher (GDD 16.10).
+func _on_march_step(block: int) -> void:
+	var up: float = 1.5 if block == 1 else 1.0
+	sfx.play("tick", 1.25 * up, -6.0)
+	_queue_sfx(0.14, "tick", 0.9 * up, -6.0)
 
 
 func _on_pulse(lo: float, hi: float) -> void:
 	sfx.play("zip", 1.4, -8.0)
 	world.fx_pulse(lo, hi, _limiter.allow(_clock_s))
+
+
+## Two-tone "click-clack" on every flip.
+func _on_ghosts_flipped(_a_solid: bool, _auto: bool) -> void:
+	sfx.play("tick", 1.6, -4.0)
+	_queue_sfx(0.09, "tick", 1.1, -4.0)
+
+
+func _on_ghost_warned(_a_next: bool) -> void:
+	world.fx_ghost_warn(_limiter.allow(_clock_s))
+	sfx.play("tick", 2.0, -8.0)
+	_queue_sfx(0.5, "tick", 2.0, -8.0)
+
+
+## Falling "whoop" in, rising "whoop" out.
+func _on_portal(ball: int, from: Vector2, to: Vector2) -> void:
+	world.fx_portal(sim, ball, from, to)
+	sfx.play("zip", 0.6, -6.0)
+	_queue_sfx(0.08, "zip", 1.5, -6.0)
+
+
+func _on_shield(_charges: int) -> void:
+	world.fx_shield()
+	sfx.play("note", 2.25, -4.0)
+
+
+func _on_boss_jump(_i: int, from: Vector2, to: Vector2) -> void:
+	sfx.play("whoosh", 0.45, -2.0)
+	world.fx_boss_jump(from, to, _limiter.allow(_clock_s))
+
+
+func _on_nova_ring(idx: PackedInt32Array) -> void:
+	for k: int in idx.size():
+		_queue_sfx(0.06 * k, "note", 1.5 + 0.25 * k, -8.0)
 
 
 func _on_net(pos: Vector2, _left: int) -> void:
@@ -470,7 +543,15 @@ func _on_net(pos: Vector2, _left: int) -> void:
 func _on_capsule(kind: String, _pos: Vector2) -> void:
 	if _limiter.allow(_clock_s):
 		world.fx_touch()
-	sfx.play("arp", {"komet": 1.0, "ekko": 1.12, "bredvinge": 0.9, "neonpuls": 1.25}.get(kind, 1.0))
+	var pitch: Dictionary = {
+		"komet": 1.0,
+		"ekko": 1.12,
+		"bredvinge": 0.9,
+		"neonpuls": 1.25,
+		"saktetid": 0.8,
+		"skjoldnett": 1.33,
+	}
+	sfx.play("arp", pitch.get(kind, 1.0))
 
 
 func _on_cleared(pos: Vector2) -> void:
@@ -478,7 +559,10 @@ func _on_cleared(pos: Vector2) -> void:
 	_chain_t = -1.0
 	world.fx_last_brick(pos)
 	sfx.play("win")
-	NeonBricks.mark_cleared(level_id)
+	if level_id > NbLevels.ENDLESS_BASE:
+		NeonBricks.mark_endless(level_id - NbLevels.ENDLESS_BASE + 1)
+	else:
+		NeonBricks.mark_cleared(level_id)
 	_card_t = 0.0
 	hand.visible = false
 
@@ -497,7 +581,9 @@ func _show_card() -> void:
 
 func _on_next() -> void:
 	var nxt: int = NeonBricks.next_level_after(level_id)
-	if nxt != 0:
+	if nxt < 0:
+		endless_requested.emit()
+	elif nxt != 0:
 		start_level(nxt)
 
 

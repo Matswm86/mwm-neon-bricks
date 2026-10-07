@@ -19,55 +19,29 @@ const TRAIL_LEN_PX: float = 150.0
 const KOMET_TRAIL_GAIN: float = 2.5
 const SPARK_R: float = 0.38
 const WHITE_HOT := Color(1.0, 0.92, 0.78)
-## Spare MultiMesh slots for boss minions (2 phases x 4).
-const MINION_SLOTS: int = 8
+## Spare MultiMesh slots for boss minions and the Nova ring (2 x 4 + 6).
+const MINION_SLOTS: int = 16
 const BOSS_SCALE := Vector3(
 	NbBalance.BOSS_W / NbBalance.BRICK_W, NbBalance.BOSS_H / NbBalance.BRICK_H, 1.0
 )
-## Per-world backdrop colours. World 1 is the designed look (DESIGN 7d);
-## worlds 2 and 3 are PLACEHOLDER tints until graphic-designer delivers
-## (GDD 15.10): cool city blue and arcade green.
-const WORLD_SKY: Array[Dictionary] = [
-	{},
-	{
-		"sky_top": Color(0.020, 0.030, 0.120),
-		"sky_mid": Color(0.050, 0.120, 0.350),
-		"sky_low": Color(0.100, 0.350, 0.700),
-		"horizon": Color(0.300, 0.900, 0.850),
-		"sun_top": Color(0.750, 1.000, 0.950),
-		"sun_mid": Color(0.350, 0.800, 1.000),
-		"sun_low": Color(0.300, 0.400, 1.000),
-		"ridge_col": Color(0.300, 0.750, 1.000),
-	},
-	{
-		"sky_top": Color(0.030, 0.060, 0.030),
-		"sky_mid": Color(0.060, 0.220, 0.100),
-		"sky_low": Color(0.150, 0.550, 0.200),
-		"horizon": Color(0.850, 1.000, 0.350),
-		"sun_top": Color(1.000, 1.000, 0.500),
-		"sun_mid": Color(0.700, 1.000, 0.300),
-		"sun_low": Color(0.200, 0.900, 0.400),
-		"ridge_col": Color(0.500, 1.000, 0.300),
-	},
-]
-const WORLD_SEA: Array[Dictionary] = [
-	{},
-	{
-		"line_col": Color(0.300, 0.550, 1.000),
-		"streak_col": Color(0.300, 0.900, 0.850),
-		"haze_col": Color(0.100, 0.300, 0.550),
-	},
-	{
-		"line_col": Color(0.400, 1.000, 0.350),
-		"streak_col": Color(1.000, 0.900, 0.300),
-		"haze_col": Color(0.200, 0.500, 0.150),
-	},
-]
-const WORLD_HORIZON: Array[Color] = [
-	Color(0.85, 0.25, 0.45), Color(0.20, 0.55, 0.85), Color(0.35, 0.80, 0.30)
-]
+## Capsule GLB per power-up kind (DESIGN 12.4-12.5); Ekko has none yet and
+## reuses the Komet pill with its own icon.
+const CAPSULE_SCENES: Dictionary = {
+	"komet": preload("res://assets/models/capsule_komet.glb"),
+	"ekko": null,
+	"bredvinge": preload("res://assets/models/capsule_bredvinge.glb"),
+	"neonpuls": preload("res://assets/models/capsule_neonpuls.glb"),
+	"saktetid": preload("res://assets/models/capsule_saktetid.glb"),
+	"skjoldnett": preload("res://assets/models/capsule_skjoldnett.glb"),
+}
+const TAPE := Color(1.000, 0.902, 0.784)
+const SAKTE_DOTS: int = 8
+const SAKTE_DOT_STEP_PX: float = 24.0
+const MAGNET_GLOW: float = 0.3
 
 var camera: Camera3D
+var vista: NbVista
+var pieces: NbPieces
 var world_id: int = 1
 ## Real-clock times of the latest glow spikes shown (for the flash test;
 ## capped, so no growth).
@@ -90,11 +64,12 @@ var _shake_px: float = 0.0
 var _shake_len: float = 0.0
 
 # Vista and frame
-var _sky_mat: ShaderMaterial
-var _sea_mat: ShaderMaterial
 var _sky_psm: ProceduralSkyMaterial
-var _sky_defaults: Dictionary = {}
-var _sea_defaults: Dictionary = {}
+var _key: DirectionalLight3D
+var _field_mat: ShaderMaterial
+var _rail_mat: StandardMaterial3D
+var _tube_base: Color = HOTPINK
+var _tube_gain: float = 2.2
 var _tubes: Array[MeshInstance3D] = []
 var _tube_mat: Array[StandardMaterial3D] = []
 var _tube_glow: Array[float] = [0.0, 0.0, 0.0]
@@ -111,6 +86,7 @@ var _assist_glow: int = -1
 var _roar_t: float = 99.0
 var _roar_i: int = -1
 var _less_fade: bool = false
+var _leans: Array[Basis] = [Basis(), Basis()]
 
 # Paddle / ball / net / capsules
 var _paddle_root: Node3D
@@ -131,14 +107,17 @@ var _net: MeshInstance3D
 var _net_mat: ShaderMaterial
 var _net_ripple_t: float = 9.0
 var _pip_out_t: float = 9.0
-var _capsule_scene: PackedScene = preload("res://assets/models/capsule_komet.glb")
 var _capsule_nodes: Array[Node3D] = []
-## Per capsule slot: kind -> icon node (komet uses the model's own icon).
-var _capsule_icons: Array[Dictionary] = []
-var _capsule_mi: Array[MeshInstance3D] = []
+## Per capsule slot: kind -> its GLB node (one shown at a time).
+var _capsule_kinds: Array[Dictionary] = []
 var _capsule_kind: Array[String] = []
-var _komet_surfaces: PackedInt32Array = PackedInt32Array()
-var _hidden_mat: StandardMaterial3D
+var _ekko_icon: Array[Node3D] = []
+var _paddle_notches: MultiMeshInstance3D
+var _notch_lit: int = -1
+var _switch_pop: Dictionary = {}
+var _shield_t: float = 9.0
+var _warn_t: float = 99.0
+var _warn_on: bool = false
 var _echo_nodes: Array[MeshInstance3D] = []
 var _echo_halos: Array[MeshInstance3D] = []
 var _combo: int = 0
@@ -158,12 +137,20 @@ var _halo_tex: GradientTexture2D
 
 
 func _ready() -> void:
+	_build_halo_tex()
 	_build_environment()
 	_build_camera()
-	_build_vista()
+	vista = NbVista.new()
+	add_child(vista)
+	vista.build(_halo_tex)
 	_build_frame()
 	_build_gameplay()
+	pieces = NbPieces.new()
+	add_child(pieces)
+	pieces.build(NbMeshes.brick_body())
+	_game_nodes.append(pieces)
 	_build_fx()
+	set_world(1)
 	get_viewport().size_changed.connect(_on_resize)
 	_on_resize()
 
@@ -206,12 +193,12 @@ func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var key := DirectionalLight3D.new()
-	key.light_color = Color(0.85, 0.9, 1.0)
-	key.light_energy = 1.1
-	key.shadow_enabled = false
-	key.rotation_degrees = Vector3(-38.0, -12.0, 0.0)
-	add_child(key)
+	_key = DirectionalLight3D.new()
+	_key.light_color = Color(0.85, 0.9, 1.0)
+	_key.light_energy = 1.1
+	_key.shadow_enabled = false
+	_key.rotation_degrees = Vector3(-38.0, -12.0, 0.0)
+	add_child(_key)
 
 
 func _build_camera() -> void:
@@ -253,86 +240,38 @@ func frame_offset() -> Vector2:
 	return Vector2((_vw - NbBalance.DESIGN_W) * 0.5, _vh - NbBalance.DESIGN_H)
 
 
-func _build_vista() -> void:
-	var sky := MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2(1000.0, 900.0)
-	sky.mesh = q
-	_sky_mat = ShaderMaterial.new()
-	_sky_mat.shader = preload("res://shaders/sky.gdshader")
-	sky.material_override = _sky_mat
-	for k: String in WORLD_SKY[1]:
-		_sky_defaults[k] = RenderingServer.shader_get_parameter_default(
-			_sky_mat.shader.get_rid(), k
-		)
-	sky.position = Vector3(0.0, 380.0, -420.0)
-	sky.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(sky)
-
-	var sea := MeshInstance3D.new()
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(1400.0, 410.0)
-	sea.mesh = pm
-	var sea_mat := ShaderMaterial.new()
-	sea_mat.shader = preload("res://shaders/sea.gdshader")
-	sea.material_override = sea_mat
-	_sea_mat = sea_mat
-	for k: String in WORLD_SEA[1]:
-		_sea_defaults[k] = RenderingServer.shader_get_parameter_default(sea_mat.shader.get_rid(), k)
-	sea.position = Vector3(0.0, 0.0, -195.0)
-	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(sea)
-
-	var palm_mat := StandardMaterial3D.new()
-	palm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	palm_mat.albedo_color = PALM
-	palm_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var palm_mesh: Mesh = _first_mesh(preload("res://assets/models/palm_silhouette.glb"))
-	# Positions from the world 1 mock (docs/mockups/src/world1_mock.py).
-	var palms: Array = [
-		[-11.9, -40.2, 26.0, 1.0], [13.1, -44.2, 19.0, -1.0], [17.6, -70.2, 14.0, -1.0]
-	]
-	for p: Array in palms:
-		var mi := MeshInstance3D.new()
-		mi.mesh = palm_mesh
-		mi.material_override = palm_mat
-		var s: float = float(p[2]) / 25.3
-		mi.scale = Vector3(s * float(p[3]), s, s)
-		mi.position = Vector3(float(p[0]), 0.0, float(p[1]))
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
-
-
 func _build_frame() -> void:
 	# Field glass: the one large transparent surface (72% black).
 	var field := MeshInstance3D.new()
 	var fq := QuadMesh.new()
 	fq.size = Vector2(10.0, 14.2)
 	field.mesh = fq
-	var fm := StandardMaterial3D.new()
-	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	fm.albedo_color = Color(0.0, 0.0, 0.0, 0.72)
-	field.material_override = fm
+	# DESIGN 13.1: 72% black, 55% inside a soft window behind the motif.
+	_field_mat = ShaderMaterial.new()
+	_field_mat.shader = preload("res://shaders/field_glass.gdshader")
+	field.material_override = _field_mat
 	field.position = to_world(Vector2(540.0, 990.0), -0.32)
 	field.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(field)
 
+	# DESIGN 13.4: the top rail runs 0.8 m past each screen edge (covers the
+	# camera drift) and the side rails stop under it, so no seam.
 	var rail_mat := StandardMaterial3D.new()
 	rail_mat.albedo_color = WALL_RAIL
-	rail_mat.metallic = 0.6
-	rail_mat.roughness = 0.45
+	rail_mat.metallic = 0.4
+	rail_mat.roughness = 0.6
+	_rail_mat = rail_mat
 	var z_top: float = (NbBalance.DESIGN_H - 280.0) * PX
 	var z_bot: float = (NbBalance.DESIGN_H - 1700.0) * PX
-	var h: float = z_top - z_bot + 0.4
+	var h: float = z_top - z_bot
 	for x: float in [0.2, 10.6]:
 		var rail := MeshInstance3D.new()
 		rail.mesh = NbMeshes.rounded_box(Vector3(0.4, h, 0.4), 0.06, 2)
 		rail.material_override = rail_mat
-		rail.position = Vector3(x - 5.4, (z_top + z_bot) * 0.5 + 0.2, 0.0)
+		rail.position = Vector3(x - 5.4, (z_top + z_bot) * 0.5, 0.0)
 		add_child(rail)
 	var top := MeshInstance3D.new()
-	top.mesh = NbMeshes.rounded_box(Vector3(10.8, 0.4, 0.4), 0.06, 2)
+	top.mesh = NbMeshes.rounded_box(Vector3(12.4, 0.4, 0.4), 0.06, 2)
 	top.material_override = rail_mat
 	top.position = Vector3(0.0, z_top + 0.2, 0.0)
 	add_child(top)
@@ -378,6 +317,20 @@ func _build_frame() -> void:
 		add_child(lamp)
 
 
+func _build_halo_tex() -> void:
+	_halo_tex = GradientTexture2D.new()
+	var gr := Gradient.new()
+	gr.set_color(0, Color(1, 1, 1, 1))
+	gr.set_color(1, Color(1, 1, 1, 0))
+	gr.add_point(0.35, Color(1, 1, 1, 0.55))
+	_halo_tex.gradient = gr
+	_halo_tex.fill = GradientTexture2D.FILL_RADIAL
+	_halo_tex.fill_from = Vector2(0.5, 0.5)
+	_halo_tex.fill_to = Vector2(1.0, 0.5)
+	_halo_tex.width = 128
+	_halo_tex.height = 128
+
+
 func _build_gameplay() -> void:
 	_bricks_mmi = MultiMeshInstance3D.new()
 	_brick_mat = ShaderMaterial.new()
@@ -400,17 +353,6 @@ func _build_gameplay() -> void:
 	add_child(_ball)
 	_game_nodes.append(_ball)
 
-	_halo_tex = GradientTexture2D.new()
-	var gr := Gradient.new()
-	gr.set_color(0, Color(1, 1, 1, 1))
-	gr.set_color(1, Color(1, 1, 1, 0))
-	gr.add_point(0.35, Color(1, 1, 1, 0.55))
-	_halo_tex.gradient = gr
-	_halo_tex.fill = GradientTexture2D.FILL_RADIAL
-	_halo_tex.fill_from = Vector2(0.5, 0.5)
-	_halo_tex.fill_to = Vector2(1.0, 0.5)
-	_halo_tex.width = 128
-	_halo_tex.height = 128
 	_halo = MeshInstance3D.new()
 	var hq := QuadMesh.new()
 	hq.size = Vector2(1.25, 1.25)
@@ -484,25 +426,46 @@ func _build_gameplay() -> void:
 	add_child(_net)
 	_game_nodes.append(_net)
 
-	_hidden_mat = StandardMaterial3D.new()
-	_hidden_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_hidden_mat.albedo_color = Color(0, 0, 0, 0)
-	_hidden_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Capsules: one node per slot holding every kind's GLB; one shown.
 	for i: int in NbBalance.CAPSULE_MAX:
-		var c: Node3D = _capsule_scene.instantiate()
-		c.visible = false
-		add_child(c)
-		_capsule_nodes.append(c)
-		_game_nodes.append(c)
-		var mi: MeshInstance3D = _find_mesh(c)
-		_capsule_mi.append(mi)
-		_capsule_kind.append("komet")
-		if i == 0 and mi:
-			for sfi: int in mi.mesh.get_surface_count():
-				var m: Material = mi.mesh.surface_get_material(sfi)
-				if m and m.resource_name in ["capsule_icon", "capsule_tail"]:
-					_komet_surfaces.append(sfi)
-		_capsule_icons.append(_build_capsule_icons(c))
+		var holder := Node3D.new()
+		holder.visible = false
+		add_child(holder)
+		_capsule_nodes.append(holder)
+		_game_nodes.append(holder)
+		var kinds: Dictionary = {}
+		for k: String in CAPSULE_SCENES:
+			var ps: PackedScene = CAPSULE_SCENES[k] if k != "ekko" else CAPSULE_SCENES["komet"]
+			var n: Node3D = ps.instantiate()
+			n.visible = false
+			holder.add_child(n)
+			kinds[k] = n
+		_capsule_kinds.append(kinds)
+		_capsule_kind.append("")
+		# Ekko has no GLB yet: the Komet pill with three rings over its icon.
+		var ek: Node3D = _ekko_rings()
+		(kinds["ekko"] as Node3D).add_child(ek)
+		_hide_komet_icon(kinds["ekko"])
+	# Saktetid: 5 tape notches on the paddle face, one goes dark every 2 s.
+	_paddle_notches = MultiMeshInstance3D.new()
+	var nmm := MultiMesh.new()
+	nmm.transform_format = MultiMesh.TRANSFORM_3D
+	nmm.use_colors = true
+	var nb := BoxMesh.new()
+	nb.size = Vector3(0.1, 0.06, 0.03)
+	nmm.mesh = nb
+	nmm.instance_count = NbBalance.SAKTETID_NOTCHES
+	for k: int in NbBalance.SAKTETID_NOTCHES:
+		nmm.set_instance_transform(
+			k, Transform3D(Basis(), Vector3((float(k) - 2.0) * 0.18, 0.0, 0.215))
+		)
+	_paddle_notches.multimesh = nmm
+	var nmat := StandardMaterial3D.new()
+	nmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	nmat.vertex_color_use_as_albedo = true
+	_paddle_notches.material_override = nmat
+	_paddle_notches.visible = false
+	_paddle_root.add_child(_paddle_notches)
 
 	_pulse_mi = MeshInstance3D.new()
 	var pq := QuadMesh.new()
@@ -515,15 +478,11 @@ func _build_gameplay() -> void:
 	add_child(_pulse_mi)
 
 
-## Placeholder icon decals per capsule kind (GDD 15.10), white shapes on
-## the capsule face so the kind never depends on colour: Ekko three rings,
-## Bredvinge a winged paddle, Neonpuls a paddle with three arcs (bars).
-func _build_capsule_icons(cap: Node3D) -> Dictionary:
+## Three white rings on the Komet pill: the Ekko icon (no Ekko GLB yet).
+func _ekko_rings() -> Node3D:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = Color(1.6, 1.6, 1.6)
-	var z: float = 0.165
-	var out: Dictionary = {}
 	var ekko := Node3D.new()
 	for pos: Vector2 in [Vector2(-0.13, -0.04), Vector2(0.0, 0.06), Vector2(0.13, -0.04)]:
 		var t := MeshInstance3D.new()
@@ -535,38 +494,23 @@ func _build_capsule_icons(cap: Node3D) -> Dictionary:
 		t.mesh = tm
 		t.material_override = mat
 		t.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-		t.position = Vector3(pos.x, pos.y, z)
+		t.position = Vector3(pos.x, pos.y, 0.165)
 		ekko.add_child(t)
-	out["ekko"] = ekko
-	var wing := Node3D.new()
-	wing.add_child(_icon_box(mat, Vector3(0.22, 0.07, 0.02), Vector3(0.0, -0.04, z), 0.0))
-	wing.add_child(_icon_box(mat, Vector3(0.16, 0.05, 0.02), Vector3(-0.18, 0.02, z), -28.0))
-	wing.add_child(_icon_box(mat, Vector3(0.16, 0.05, 0.02), Vector3(0.18, 0.02, z), 28.0))
-	out["bredvinge"] = wing
-	var puls := Node3D.new()
-	puls.add_child(_icon_box(mat, Vector3(0.26, 0.06, 0.02), Vector3(0.0, -0.13, z), 0.0))
-	var arcs: Array = [[0.14, -0.04], [0.22, 0.03], [0.30, 0.10]]
-	for a: Array in arcs:
-		puls.add_child(
-			_icon_box(mat, Vector3(float(a[0]), 0.035, 0.02), Vector3(0.0, a[1], z), 0.0)
-		)
-	out["neonpuls"] = puls
-	for k: String in out:
-		var n: Node3D = out[k]
-		n.visible = false
-		cap.add_child(n)
-	return out
+	return ekko
 
 
-func _icon_box(mat: Material, size: Vector3, pos: Vector3, rot_z: float) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
-	mi.material_override = mat
-	mi.position = pos
-	mi.rotation_degrees = Vector3(0.0, 0.0, rot_z)
-	return mi
+func _hide_komet_icon(n: Node3D) -> void:
+	var mi: MeshInstance3D = _find_mesh(n)
+	if mi == null:
+		return
+	var hidden := StandardMaterial3D.new()
+	hidden.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hidden.albedo_color = Color(0, 0, 0, 0)
+	hidden.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	for sfi: int in mi.mesh.get_surface_count():
+		var m: Material = mi.mesh.surface_get_material(sfi)
+		if m and m.resource_name in ["capsule_icon", "capsule_tail"]:
+			mi.set_surface_override_material(sfi, hidden)
 
 
 func _build_fx() -> void:
@@ -675,23 +619,35 @@ func show_gameplay(on: bool) -> void:
 		_pulse_mi.visible = false
 
 
-## Backdrop tint for a world (1-based). World 1 is the designed scene.
+## World look (DESIGN 11): vista, floor, wall tubes, rails, key light,
+## ambient, sky radiance colours and the field-glass window.
 func set_world(w: int) -> void:
-	world_id = clampi(w, 1, WORLD_SKY.size())
-	var sky: Dictionary = WORLD_SKY[world_id - 1]
-	for k: String in _sky_defaults:
-		_sky_mat.set_shader_parameter(k, sky.get(k, _sky_defaults[k]))
-	var sea: Dictionary = WORLD_SEA[world_id - 1]
-	for k: String in _sea_defaults:
-		_sea_mat.set_shader_parameter(k, sea.get(k, _sea_defaults[k]))
-	var hz: Color = WORLD_HORIZON[world_id - 1]
-	_sky_psm.sky_horizon_color = hz
-	_sky_psm.ground_horizon_color = hz * 0.65
+	world_id = clampi(w, 1, NbWorldLook.LOOKS.size())
+	var look: Dictionary = NbWorldLook.get_look(world_id)
+	vista.set_world(world_id)
+	_sky_psm.sky_top_color = look["psm_top"]
+	_sky_psm.sky_horizon_color = look["psm_horizon"]
+	_sky_psm.ground_horizon_color = (look["psm_horizon"] as Color) * 0.65
+	_tube_base = look["tube"]
+	_tube_gain = float(look.get("tube_gain", 2.2))
+	_rail_mat.albedo_color = look["rail"]
+	_key.light_color = look["key"]
+	_key.light_energy = float(look["key_energy"])
+	env.ambient_light_energy = float(look["ambient"])
+	var sky: Dictionary = look["sky"]
+	_field_mat.set_shader_parameter("window_on", 1.0 if bool(look["window"]) else 0.0)
+	_field_mat.set_shader_parameter("window_c", sky["motif_c"])
+	_field_mat.set_shader_parameter("window_r", sky["motif_r"])
+	var box := Vector2(1.95, 1.2) if int(sky["motif"]) == 3 else Vector2.ZERO
+	_field_mat.set_shader_parameter("window_box", box)
 
 
 func set_less_motion(on: bool) -> void:
 	_less_motion = on
 	_net_mat.set_shader_parameter("less_motion", 1.0 if on else 0.0)
+	_brick_mat.set_shader_parameter("less_motion", 1.0 if on else 0.0)
+	vista.set_less_motion(on)
+	pieces.set_less_motion(on)
 
 
 ## Builds the brick MultiMesh and paddle model for a fresh level.
@@ -729,6 +685,10 @@ func bind_level(sim: NbSim) -> void:
 		mm.set_instance_color(i, col.srgb_to_linear())
 		mm.set_instance_custom_data(i, cd)
 	_bricks_mmi.multimesh = mm
+	pieces.bind(sim)
+	_switch_pop.clear()
+	_shield_t = 9.0
+	_notch_lit = -1
 	_set_paddle(sim.paddle_half_base * 2.0)
 	_hist.clear()
 	_net_ripple_t = 9.0
@@ -740,11 +700,18 @@ func bind_level(sim: NbSim) -> void:
 ## INSTANCE_CUSTOM for brick.gdshader: x = type, y = hits left, z = carrier
 ## (boss: max HP), w = fade 0..1 or 1 + glow.
 func _brick_custom(b: NbSim.Brick, w: float) -> Color:
-	var kind: float = float(["G", "D", "C", "T", "N", "M", "K"].find(b.code))
+	var kind: float = float(["G", "D", "C", "T", "N", "M", "K", "S", "O"].find(b.code))
 	var z: float = 1.0 if b.carrier else 0.0
 	if b.boss:
 		z = float(b.max_hp)
 	return Color(maxf(kind, 0.0), float(maxi(b.hp, 0)), z, w)
+
+
+## Switch custom data: y = 1 while it can flip (dark in the finale), z = 1
+## while set A is solid (the square mark is lit).
+func _switch_custom(sim: NbSim, w: float) -> Color:
+	var can: float = 0.0 if sim.ghosts_locked or not sim.has_ghosts else 1.0
+	return Color(7.0, can, 1.0 if sim.ghost_a_solid else 0.0, w)
 
 
 func _brick_basis(b: NbSim.Brick) -> Basis:
@@ -768,6 +735,14 @@ func _set_paddle(w_px: float) -> void:
 	if mi:
 		for s: int in mi.mesh.get_surface_count():
 			var m: Material = mi.mesh.surface_get_material(s)
+			if m is StandardMaterial3D and m.resource_name in ["paddle_body", "paddle_plate"]:
+				# DESIGN 13.2: lit blue-steel face; the clear coat is set here
+				# in case the importer dropped it.
+				var sm: StandardMaterial3D = (m as StandardMaterial3D).duplicate()
+				sm.clearcoat_enabled = true
+				sm.clearcoat = 1.0
+				sm.clearcoat_roughness = 0.05
+				mi.set_surface_override_material(s, sm)
 			if m is StandardMaterial3D and m.resource_name == "paddle_light":
 				_paddle_light = (m as StandardMaterial3D).duplicate()
 				_paddle_light_e = _paddle_light.emission_energy_multiplier
@@ -806,6 +781,21 @@ func _sync_paddle(sim: NbSim, dt: float) -> void:
 		if _touch_glow_t < NbBalance.TOUCH_GLOW_S:
 			g += NbBalance.TOUCH_GLOW_GAIN
 		_paddle_light.emission_energy_multiplier = _paddle_light_e * g
+	# Saktetid countdown: 5 tape notches, one goes dark every 2 s.
+	var lit: int = -1
+	if sim.slow_t > 0.0:
+		lit = ceili(sim.slow_t / (NbBalance.SAKTETID_S / float(NbBalance.SAKTETID_NOTCHES)))
+	_paddle_notches.visible = lit >= 0
+	if lit != _notch_lit:
+		_notch_lit = lit
+		var nm: MultiMesh = _paddle_notches.multimesh
+		for k: int in nm.instance_count:
+			var on: bool = k < lit
+			nm.set_instance_color(k, TAPE * 2.0 if on else Color(0.05, 0.04, 0.06))
+	# Skjoldnett pip weaving back onto the net (0.4 s).
+	_shield_t += dt
+	var pin: float = 1.0 if _less_motion else clampf(_shield_t / 0.4, 0.0, 1.0)
+	_net_mat.set_shader_parameter("pip_in", pin)
 
 
 func _sync_ball(sim: NbSim, dt: float) -> void:
@@ -838,7 +828,7 @@ func _sync_ball(sim: NbSim, dt: float) -> void:
 				_hist.pop_back()
 	else:
 		_hist.clear()
-	_draw_trail(komet)
+	_draw_trail(komet, sim)
 	# Komet sparks: one per brick left, orbiting (static under less motion).
 	var mm: MultiMesh = _sparks.multimesh
 	var n: int = sim.komet_left if komet and show else 0
@@ -852,9 +842,18 @@ func _sync_ball(sim: NbSim, dt: float) -> void:
 		)
 
 
-func _draw_trail(komet: bool) -> void:
+func _draw_trail(komet: bool, sim: NbSim) -> void:
 	_trail_mesh.clear_surfaces()
 	if _hist.size() < 2:
+		return
+	# Saktetid (DESIGN 12.4): a dotted tape trail; the ribbon fades back in
+	# over the 0.5 s wind-up.
+	var tape: float = 0.0
+	if sim.slow_t > 0.0:
+		tape = clampf(sim.slow_t / NbBalance.SAKTETID_RETURN_S, 0.0, 1.0)
+	if tape > 0.0:
+		_draw_tape_dots(tape)
+	if tape >= 1.0:
 		return
 	var max_len: float = TRAIL_LEN_PX * (KOMET_TRAIL_GAIN if komet else 1.0)
 	if _combo >= NbBalance.COMBO_TIER_WARM:
@@ -887,11 +886,47 @@ func _draw_trail(komet: bool) -> void:
 		else:
 			dir = (pts[i - 1] - pts[i]).normalized()
 		var nrm := Vector2(-dir.y, dir.x) * half_w * (1.0 - f)
-		var c := Color(col.r * 2.0, col.g * 2.0, col.b * 2.0, (1.0 - f) * 0.8)
+		var c := Color(col.r * 2.0, col.g * 2.0, col.b * 2.0, (1.0 - f) * 0.8 * (1.0 - tape))
 		_trail_mesh.surface_set_color(c)
 		_trail_mesh.surface_add_vertex(to_world(pts[i] + nrm, -0.08))
 		_trail_mesh.surface_set_color(c)
 		_trail_mesh.surface_add_vertex(to_world(pts[i] - nrm, -0.08))
+	_trail_mesh.surface_end()
+
+
+## 8 dots every 24 px behind the ball, radius 7.5 -> 0.75 px, 80% tape white.
+func _draw_tape_dots(alpha: float) -> void:
+	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	var acc: float = 0.0
+	var next_at: float = SAKTE_DOT_STEP_PX
+	var k: int = 0
+	for i: int in range(1, _hist.size()):
+		var a: Vector2 = _hist[i - 1]
+		var b: Vector2 = _hist[i]
+		var seg: float = a.distance_to(b)
+		while seg > 0.0 and acc + seg >= next_at and k < SAKTE_DOTS:
+			var p: Vector2 = a.lerp(b, (next_at - acc) / seg)
+			var r: float = lerpf(7.5, 0.75, float(k) / float(SAKTE_DOTS - 1))
+			var c := Color(TAPE.r * 1.6, TAPE.g * 1.6, TAPE.b * 1.6, 0.8 * alpha)
+			# Round dot: an 8-segment fan.
+			for fan: int in 8:
+				var a0: float = TAU * float(fan) / 8.0
+				var a1: float = TAU * float(fan + 1) / 8.0
+				_trail_mesh.surface_set_color(c)
+				_trail_mesh.surface_add_vertex(to_world(p, -0.08))
+				_trail_mesh.surface_set_color(c)
+				_trail_mesh.surface_add_vertex(to_world(p + Vector2(cos(a0), sin(a0)) * r, -0.08))
+				_trail_mesh.surface_set_color(c)
+				_trail_mesh.surface_add_vertex(to_world(p + Vector2(cos(a1), sin(a1)) * r, -0.08))
+			next_at += SAKTE_DOT_STEP_PX
+			k += 1
+		acc += seg
+		if k >= SAKTE_DOTS:
+			break
+	if k == 0:
+		_trail_mesh.surface_add_vertex(Vector3.ZERO)
+		_trail_mesh.surface_add_vertex(Vector3.ZERO)
+		_trail_mesh.surface_add_vertex(Vector3.ZERO)
 	_trail_mesh.surface_end()
 
 
@@ -905,17 +940,26 @@ func _sync_bricks(sim: NbSim, dt: float) -> void:
 	var pulse: float = 0.0
 	if sim.finale_on:
 		pulse = 0.35 * (0.5 + 0.5 * sin(_t * TAU * NbBalance.FINALE_PULSE_HZ))
-	var lean := Basis()
-	if sim.march_on and not _less_motion:
-		lean = Basis(Vector3.BACK, deg_to_rad(-NbBalance.MARCH_LEAN_DEG * float(sim.march_dir)))
+	var leans: Array[Basis] = _leans
+	for k: int in 2:
+		var d: int = sim.blocks[k].dir if k < sim.blocks.size() else 0
+		# The second block leans the other way (GDD 16.10).
+		var sgn: float = -1.0 if k == 1 else 1.0
+		leans[k] = Basis(Vector3.BACK, deg_to_rad(-NbBalance.MARCH_LEAN_DEG * float(d) * sgn))
+		if _less_motion:
+			leans[k] = Basis()
+	_warn_t += dt
+	var warn_glow: float = 0.0
+	if _warn_t < NbBalance.GHOST_WARN_S and _warn_on:
+		warn_glow = 0.6 * maxf(0.0, sin(_warn_t * TAU * float(NbBalance.GHOST_WARN_PULSES)))
 	var n: int = mini(sim.bricks.size(), mm.instance_count)
 	for i: int in n:
 		var b: NbSim.Brick = sim.bricks[i]
 		_brick_squash[i] += dt
 		_brick_fade[i] += dt
 		var base: Basis = _brick_basis(b)
-		if b.march:
-			base = lean * base
+		if b.block >= 0:
+			base = leans[b.block] * base
 		var xf := Transform3D(base, to_world(b.center()))
 		var w: float = 1.0
 		if b.minion and b.alive and not _less_motion:
@@ -943,12 +987,37 @@ func _sync_bricks(sim: NbSim, dt: float) -> void:
 				w = 2.0 - _roar_t / NbBalance.BOSS_ROAR_S
 			elif pulse > 0.0 and w >= 1.0:
 				w = 1.0 + pulse
+		if b.ghost != 0 or (b.boss and pieces.boss_model_on):
+			# Drawn by NbPieces (ghost MultiMesh, boss GLB).
+			xf = Transform3D(Basis().scaled(Vector3.ZERO), xf.origin)
+		if b.code == "S":
+			var pop: float = float(_switch_pop.get(i, 99.0))
+			var g: float = 0.0
+			if pop < NbBalance.SWITCH_POP_S * 2.0:
+				g = sin(PI * pop / (NbBalance.SWITCH_POP_S * 2.0))
+				_switch_pop[i] = pop + dt
+				if not _less_motion and pop < NbBalance.SWITCH_POP_S:
+					var ps: float = 1.0 + 0.15 * sin(PI * pop / NbBalance.SWITCH_POP_S)
+					xf.basis = xf.basis.scaled(Vector3.ONE * ps)
+			g = maxf(g, warn_glow)
+			mm.set_instance_transform(i, xf)
+			mm.set_instance_custom_data(i, _switch_custom(sim, 1.0 + g))
+			continue
+		if b.code == "O" and b.alive and w >= 1.0 and w < 1.0 + MAGNET_GLOW:
+			for bl: NbSim.Ball in sim.balls:
+				if (
+					bl.pos.distance_squared_to(b.center())
+					< NbBalance.PULL_RADIUS * NbBalance.PULL_RADIUS
+				):
+					w = 1.0 + MAGNET_GLOW
+					break
 		mm.set_instance_transform(i, xf)
 		mm.set_instance_custom_data(i, _brick_custom(b, w))
 		if i >= _brick_xf.size() - MINION_SLOTS and b.minion:
 			mm.set_instance_color(i, b.color.srgb_to_linear())
 	if not restoring and not _restored.is_empty() and flt >= 1.0:
 		_restored = PackedInt32Array()
+	pieces.sync(sim, dt, pulse)
 
 
 func _sync_net(sim: NbSim, dt: float) -> void:
@@ -980,13 +1049,9 @@ func _sync_capsules(sim: NbSim) -> void:
 
 func _set_capsule_kind(i: int, kind: String) -> void:
 	_capsule_kind[i] = kind
-	var mi: MeshInstance3D = _capsule_mi[i]
-	if mi:
-		for sfi: int in _komet_surfaces:
-			mi.set_surface_override_material(sfi, null if kind == "komet" else _hidden_mat)
-	var icons: Dictionary = _capsule_icons[i]
-	for k: String in icons:
-		(icons[k] as Node3D).visible = k == kind
+	var kinds: Dictionary = _capsule_kinds[i]
+	for k: String in kinds:
+		(kinds[k] as Node3D).visible = k == kind
 
 
 func _sync_fx(dt: float) -> void:
@@ -1019,11 +1084,11 @@ func _sync_tubes(dt: float) -> void:
 		_rush = minf(1.0, _rush + dt / 0.3)
 	else:
 		_rush = maxf(0.0, _rush - dt / NbBalance.RUSH_RIM_FADE_S)
-	var base: Color = HOTPINK.lerp(WHITE_HOT, 0.55 * _rush)
+	var base: Color = _tube_base.lerp(WHITE_HOT, 0.55 * _rush)
 	for i: int in _tube_mat.size():
 		_tube_glow[i] = maxf(0.0, _tube_glow[i] - dt)
 		var g: float = 1.0 + 0.6 * (_tube_glow[i] / NbBalance.WALL_GLOW_S)
-		_tube_mat[i].albedo_color = base * 2.2 * g
+		_tube_mat[i].albedo_color = base * _tube_gain * g
 
 
 ## Camera: intro sweep, idle drift, push-in and shake (DESIGN 6a/6b).
@@ -1169,9 +1234,11 @@ func fx_shake(px: float, secs: float) -> void:
 func fx_boss_hit(i: int) -> void:
 	if i >= 0 and i < _brick_squash.size():
 		_brick_squash[i] = 0.0
+	pieces.fx_boss_hit()
 
 
 func fx_boss_roar(i: int, glow_spike: bool) -> void:
+	pieces.fx_boss_roar(glow_spike)
 	if glow_spike:
 		_log_spike()
 		_roar_i = i
@@ -1205,6 +1272,44 @@ func fx_restored(indices: PackedInt32Array) -> void:
 	_restored = indices if not _less_motion else PackedInt32Array()
 	for i: int in indices:
 		_brick_fade[i] = 99.0
+
+
+## Switch hit: the button pops 1.0 -> 1.15 -> 1.0 and the power symbol
+## glows once (only when the limiter allowed the spike).
+func fx_switch(i: int, glow_spike: bool) -> void:
+	if glow_spike:
+		_log_spike()
+	_switch_pop[i] = 0.0 if glow_spike else NbBalance.SWITCH_POP_S * 2.0
+
+
+## Auto-flip warning: ghosts about to turn solid and the switches pulse
+## twice in 1 s (one limiter grant covers the soft pulse).
+func fx_ghost_warn(glow_spike: bool) -> void:
+	if glow_spike:
+		_log_spike()
+	_warn_t = 0.0
+	_warn_on = glow_spike
+	pieces.fx_warn(glow_spike)
+
+
+## Portal hop: both portals of the pair pop; the main ball's trail is cut so
+## no streak is drawn across the field.
+func fx_portal(sim: NbSim, ball: int, from: Vector2, to: Vector2) -> void:
+	if ball == 0:
+		_hist.clear()
+	for k: int in sim.portals.size():
+		var pp: Vector2 = sim.portals[k].pos
+		if pp.distance_to(from) < 80.0 or pp.distance_to(to) < 100.0:
+			pieces.fx_portal(k)
+
+
+func fx_shield() -> void:
+	_shield_t = 0.0
+
+
+func fx_boss_jump(from: Vector2, to: Vector2, glow_spike: bool) -> void:
+	fx_ring(from, Color(0.612, 1.0, 0.784), 1.2, glow_spike)
+	fx_ring(to, Color(0.612, 1.0, 0.784), 1.2, false)
 
 
 func fx_last_brick(pos: Vector2) -> void:

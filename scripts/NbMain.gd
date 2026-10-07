@@ -52,12 +52,15 @@ func _ready() -> void:
 	map = NbMapScreen.new()
 	center_frame.add_child(map)
 	map.level_chosen.connect(open_level)
+	map.endless_chosen.connect(func(k: int) -> void: open_level(NbLevels.ENDLESS_BASE + k))
 	map.settings_pressed.connect(_open_settings)
 	map.world_changed.connect(func(w: int) -> void: world.set_world(w))
 	play = NbPlay.new()
 	add_child(play)
 	play.setup(world, sfx, field_frame, center_frame, screen_root)
 	play.map_requested.connect(open_map)
+	play.endless_requested.connect(func() -> void: open_map(true))
+	play.music = music
 	play.level_started.connect(music.play_level)
 	settings = NbSettings.new()
 	center_frame.add_child(settings)
@@ -154,13 +157,15 @@ func open_level(id: int) -> void:
 	_apply_settings()
 
 
-func open_map() -> void:
+func open_map(endless_page: bool = false) -> void:
 	screen = "map"
 	play.stop()
 	world.show_gameplay(false)
 	world.start_intro()
 	music.play_map()
 	map.open_for(last_level)
+	if endless_page:
+		map.show_endless()
 	map.visible = true
 	settings.visible = false
 	NbDisc.block_input(NbBalance.HOLDOVER_MS)
