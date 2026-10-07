@@ -34,7 +34,7 @@ const SIM_MEDIAN: Dictionary = {
 	7: [37, 41],
 	8: [69, 69],
 	9: [49, 54],
-	10: [50, 51],
+	10: [46, 40],
 	11: [36, 36],
 	12: [31, 29],
 	13: [35, 37],
@@ -43,12 +43,8 @@ const SIM_MEDIAN: Dictionary = {
 }
 
 ## Open findings for game-designer, printed as KNOWN instead of failing.
-## L10: the boss-phase stretch runs 11-13 s with paddle english (GDD 4.3);
-## with english off it is 7.8 s, matching tools/action_sim.py (7.7 s), which
-## does not model english. Reported 2026-10-07; remove once decided.
-const KNOWN_GAP: Dictionary = {
-	10: "paddle english widens the boss-phase gap; designer decision pending",
-}
+## (Level 10 was here until GDD 16.6 lowered its Vanlig boss HP 20 -> 16.)
+const KNOWN_GAP: Dictionary = {}
 
 var fails: int = 0
 var finished: int = 0

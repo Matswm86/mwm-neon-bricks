@@ -229,7 +229,7 @@ const LEVELS: Array[Dictionary] = [
 		],
 		"carriers": ["bredvinge", "ekko"],
 		"bonus_pool": ["komet", "ekko", "bredvinge"],
-		"boss": {"hp": [14, 20], "speed": [80.0, 120.0], "minions": true},
+		"boss": {"hp": [14, 16], "speed": [80.0, 120.0], "minions": true},
 		"lett_speed": 530.0,
 		"vanlig_speed": 760.0,
 		"vanlig_paddle": 280.0,
