@@ -1,6 +1,6 @@
 # MWM Neon Bricks: visual design spec
 
-Owner: graphic-designer. Version 1, 2026-10-05. The builder reads this before touching any colour, material, light, camera or UI node. Every token carries its rule and its reason. Game rules and numbers live in `docs/GDD.md`; child rules (rule N) are in `projects/mwm-play/docs/CHILD_UX_RESEARCH.md`. Numbers tagged (my calc) are my own arithmetic on rendered pixels, WCAG 2.x formula.
+Owner: graphic-designer. Version 2, 2026-10-07 (worlds 2-6, new elements and QA look fixes added as sections 11-13; section 2c is superseded by 11). Version 1, 2026-10-05. The builder reads this before touching any colour, material, light, camera or UI node. Every token carries its rule and its reason. Game rules and numbers live in `docs/GDD.md`; child rules (rule N) are in `projects/mwm-play/docs/CHILD_UX_RESEARCH.md`. Numbers tagged (my calc) are my own arithmetic on rendered pixels, WCAG 2.x formula.
 
 Mockups (all rebuilt by the scripts in `docs/mockups/src/`):
 
@@ -10,6 +10,10 @@ Mockups (all rebuilt by the scripts in `docs/mockups/src/`):
 | `docs/mockups/world1_zones.png` | Same frame with zones: home square (white), drag zone (green), wrist strip (red), playfield (yellow line) |
 | `docs/mockups/wincard_mock.png` | Win card over the dimmed scene |
 | `docs/mockups/elements.png` | Brick colours, the slice brick types, both paddles, ball, Komet ball, capsule, three net states |
+| `docs/mockups/world1_fix_mock.png` | World 1 with the section 13 fixes (neon sun through the glass window, lit paddle, continuous top rail) |
+| `docs/mockups/world2_mock.png` ... `world6_mock.png` | One gameplay frame per world 2-6 (section 11) with that world's new elements |
+| `docs/mockups/worlds_overview.png` | All six worlds side by side (the "different at a glance" check) |
+| `docs/mockups/elements_w26.png` | New bricks, switch, ghosts A/B solid and phased, portals, capsules, bosses L20/L25/L30, paddle v1 vs v2 |
 | `docs/mockups/src/*.py` | Blender 4.5 scripts (`blender -b -P world1_mock.py -- out.png`, `elements.py -- raw.png labels.json assets/models`) and Pillow overlays (`overlay.py`, `label_sheet.py`) |
 
 ---
@@ -41,7 +45,7 @@ Brick colour is decoration only. The brick **type** is always told by shape (sec
 | magenta | #D63AF9 | Color(0.839, 0.227, 0.976) | Ramp step 5, world 1 sea grid |
 | violet | #8A5CFF | Color(0.541, 0.361, 1.000) | Ramp step 6 (worlds 5-6) |
 | cyan | #2EE6FF | Color(0.180, 0.902, 1.000) | **Player colour**: paddle light strip, net, ball halo, capsule rim. Not used for bricks in worlds 1-4. |
-| mint | #3DFFB0 | Color(0.239, 1.000, 0.690) | Ramp colour in world 5 only |
+| mint | #4DFF9A | Color(0.302, 1.000, 0.604) | Ramp colour in world 5 only. v2: was #3DFFB0, moved greener so it never reads as the player cyan |
 
 ### 2b. Fixed element colours
 
@@ -58,6 +62,8 @@ Brick colour is decoration only. The brick **type** is always told by shape (sec
 | field_tint | #000000 at 72% alpha | Color(0, 0, 0, 0.72) | Glass behind the playfield, unshaded |
 
 ### 2c. World accents (one environment per world)
+
+**Superseded 2026-10-07 by section 11** (exact palettes, props and shader values). Kept for history.
 
 Each world keeps the same bricks, paddle, ball and frame; only the vista, the wall-tube colour and the brick row ramp change.
 
@@ -187,9 +193,9 @@ Brick colours are set per instance (MultiMesh `use_colors`, or per-instance shad
 | Triple `T` (world 2) | Three dots in a triangle, one pops per hit | as Double |
 | Nova `N` (world 3) | Four-point star on the face (different point count from the carrier star) | Star emissive 4 |
 | Glider `M` (world 4) | Chevrons `< >` on both ends | Rim tube |
-| Switch `S` (world 5) | Round button: ring with a dot (power symbol), slightly domed | Ring emissive |
-| Ghost `A` / `B` (world 5) | A: dashed outline + square corner marks. B: dashed outline + round corner dots. Solid = filled body + outline, phased = outline only at 30% opacity | Outline only |
-| Portal `1` / `2` (world 6) | Pair 1: a single spiral disc. Pair 2: spiral with a star centre | Spiral emissive, rotates 0.25 rev/s (static under "Mindre bevegelse") |
+| Switch `S` (world 4, level 16) | Round button: ring with a dot (power symbol), slightly domed | Ring emissive |
+| Ghost `A` / `B` (world 4, level 16) | A: dashed outline + square corner brackets. B: dashed outline + round corner dots. Dashes and marks sit on a dark keyline (section 12.2). Solid = filled body + outline, phased = outline only at 30% opacity | Outline only |
+| Portal `1` / `2` (world 5, level 21) | Pair 1: a single spiral disc. Pair 2: spiral with a star centre | Spiral emissive, rotates 0.25 rev/s (static under "Mindre bevegelse") |
 
 ### 7c. Paddle, ball, net, capsule
 - **Paddle:** dark gunmetal stadium shell with clear coat, a cyan neon loop around its face and two white end lamps. Cyan is reserved for the player's things, so the paddle is always the most saturated cool object on screen. Touch-down: strip energy +40% for 80 ms.
@@ -275,3 +281,289 @@ Target: a polished commercial mobile game, stylized, never photoreal. No voxel/b
 2. What does it cost on the phone GPU (draw calls, overdraw, shader cost)?
 3. Can a cheaper trick (baked light, texture, vertex color, fake shadow) get the same look?
 4. Does it fit this spec?
+
+
+---
+
+## 11. Worlds 2-6 (art direction, 2026-10-07)
+
+Mocks: `docs/mockups/world2_mock.png` ... `world6_mock.png`, overview `worlds_overview.png`. Every world keeps the world 1 camera, frame, field glass, bricks, paddle, ball and net; only the vista, the floor, the wall tubes, the rail tint, the brick ramp and the win-card rim change. All numbers below come from `docs/mockups/src/nb_worlds.py` (the single source the mocks are rendered from); `nb_sky.py` is a numpy port of the sky shader and is the reference when the GLSL and this text disagree.
+
+### 11.0 The rule that drives every palette: the glass luminance budget
+
+The field glass multiplies everything behind it by 0.28 (linear light). I verified this against the QA screenshot: sun `#FFC93C` x 0.9 through the glass predicts (137, 107, 28), the capture shows (139, 103, 29). The white ball must stay at 4.5:1 or better against any vista area larger than the ball, so a large vista area may show at most relative luminance **0.178** after the glass (my calc). At that luminance a yellow or green is olive or ochre (the "muddy sun"), while red, pink, magenta, violet and blue stay vivid. So:
+
+1. **Behind the glass, large shapes use red, pink, magenta, violet or blue** at displayed luminance 0.178 or lower.
+2. **Thin details** (12 px or less in one direction: window dots, lamp heads, neon strips, beads, ridge lines) may reach displayed luminance 0.37 (2.5:1 against the ball); the ball covers them for 2-3 frames at most.
+3. **Each world's warm or bright signature lives where there is no glass**: the sky band (y 0-280, minus the 232 x 232 home square), the bricks, the rails and tubes, and the floor strip below y 1700.
+4. A motif that needs more light than 0.28 transmission gets a **glass window** (section 13.1) and HDR source colours, never a brighter field-wide glass.
+
+Measured on the vista-only renders (gameplay hidden, my calc, WCAG 2.x, ball #FFFFFF, worst 44 x 44 px area inside the field y 280-1540 / worst single pixel):
+
+| World | Worst area L | Ball ratio | Worst thin detail L | Ratio | Brightest thing |
+|---|---|---|---|---|---|
+| 1 | 0.183 | 4.51:1 | 0.365 | 2.5:1 | Sun lower slices at the window edge (at the limit; do not brighten) |
+| 2 | 0.059 | 9.6:1 | 0.371 | 2.5:1 | Lit window dots |
+| 3 | 0.134 | 5.7:1 | 0.341 | 2.7:1 | Cabinet marquee strips |
+| 4 | 0.086 | 7.7:1 | 0.369 | 2.5:1 | Lamp heads |
+| 5 | 0.161 | 5.0:1 | 0.267 | 3.3:1 | Crystal facets |
+| 6 | 0.057 | 9.8:1 | 0.313 | 2.9:1 | Ring-gate beads |
+
+If a level or the Godot capture shows a higher value, dim the emission of that vista element. Never brighten the ball.
+
+### 11.1 One line per world
+
+| # | World | At a glance | Signature where there is no glass | Behind the glass |
+|---|---|---|---|---|
+| 1 | Neonstranda | Pink-orange sunset | Stars in the sky band | Neon sliced sun (fixed, 13.1), grid sea, ridges, palms |
+| 2 | Rutenettbyen | Electric-blue night city | Full moon with two cloud bands, top right (x 710-910, y 50-250) | Low skyline, three depth layers with amber window dots, four vertical neon strips (pink/blue) |
+| 3 | Arkadehallen | Gold arcade hall | Ceiling truss with a row of 14 gold bulbs (x 250-1080, y 150-215); gold checker floor lines | Square gold pixel stars, a CRT screen at the horizon with pixel hills and a pixel sun, cabinet rows on both sides |
+| 4 | Nattveien | Red highway at night | Overpass deck crossing the band with 14 amber lamps (y 130-215) | Road to the horizon with amber lane dashes, red edge lines, red tail-light and warm head-light streaks, lamp posts, red mountain line |
+| 5 | Krystallgrotta | Mint-and-violet cave | Rock ceiling with 10 short stalactites, mint tips | Faceted violet crystal heart at the horizon, crystal clusters, floor mist, violet lattice floor |
+| 6 | Stjerneporten | Violet space gate with gold | Nebula and a gold-lit planet top right (x 800-960, y 60-200) | Ring gate (violet segments, 24 gold beads) around the field, gate light glow, nebula, gold grid bridge |
+
+### 11.2 Sky gradient (sky.gdshader uniforms, `source_color`)
+
+| World | sky_top | sky_mid | sky_low | horizon |
+|---|---|---|---|---|
+| 1 Neonstranda | `#0B0630` Color(0.043, 0.024, 0.188) | `#3A0E5C` Color(0.227, 0.055, 0.361) | `#C2186B` Color(0.761, 0.094, 0.420) | `#FF7A3D` Color(1.000, 0.478, 0.239) |
+| 2 Rutenettbyen | `#040A22` Color(0.016, 0.039, 0.133) | `#0B1C48` Color(0.043, 0.110, 0.282) | `#1D3C7A` Color(0.114, 0.235, 0.478) | `#3A6FD0` Color(0.227, 0.435, 0.816) |
+| 3 Arkadehallen | `#0E0818` Color(0.055, 0.031, 0.094) | `#1C0E2A` Color(0.110, 0.055, 0.165) | `#3A1838` Color(0.227, 0.094, 0.220) | `#C8501E` Color(0.784, 0.314, 0.118) |
+| 4 Nattveien | `#05030C` Color(0.020, 0.012, 0.047) | `#160818` Color(0.086, 0.031, 0.094) | `#3E0C1C` Color(0.243, 0.047, 0.110) | `#C0283A` Color(0.753, 0.157, 0.227) |
+| 5 Krystallgrotta | `#02060C` Color(0.008, 0.024, 0.047) | `#061624` Color(0.024, 0.086, 0.141) | `#0E2438` Color(0.055, 0.141, 0.220) | `#1E5A4E` Color(0.118, 0.353, 0.306) |
+| 6 Stjerneporten | `#020108` Color(0.008, 0.004, 0.031) | `#120828` Color(0.071, 0.031, 0.157) | `#2A0C4A` Color(0.165, 0.047, 0.290) | `#5A1C8A` Color(0.353, 0.110, 0.541) |
+
+### 11.3 Sky shader v2: motif, stars, ridges, nebula
+
+New uniforms on `shaders/sky.gdshader` (all set per world from a `WORLD_LOOK` table in `NbWorld.gd` that replaces `WORLD_SKY`, `WORLD_SEA` and `WORLD_HORIZON`):
+
+`int motif` (0 none, 1 sliced sun, 2 moon + cloud bands, 3 CRT screen, 5 hex crystal, 6 gate light) · `vec2 motif_c` · `float motif_r` (in t units: t = view direction xy / -z, as the current shader; screen x = 540 + 1350 t.x, screen y = 1310 - 1350 t.y) · `vec3 motif_top, motif_mid, motif_low, motif_rim : source_color` · `float motif_hdr` (2.222 when the motif has a glass window, else 1.0) · `vec3 star_col : source_color`, `float star_gain`, `float star_density` (hash threshold), `float star_square` (0 round, 1 square pixel stars: `max(abs(dx), abs(dy)) < 0.08` instead of the round distance) · `vec3 ridge_col`, `float ridge_gain` (0 = off), `float ridge_height`, `vec3 ridge_solid` · `sampler2D nebula_tex : hint_default_black, filter_linear, repeat_enable` (`assets/textures/nebula_512.png`, import with sRGB **off**: it is data), `vec3 neb_a, neb_b : source_color`, `float neb_gain` · `vec3 haze_col : source_color` (replaces `sun_low` in the haze line; = floor haze colour).
+
+Motif colours are what the player sees **through the glass**; the shader outputs `colour x motif_hdr`, unclamped, and only the non-motif sky keeps `min(c, vec3(0.98))`:
+
+`ALBEDO = mix(min(c, vec3(0.98)), motif_colour * motif_hdr, motif_cover);`
+
+| World | motif | c (t) | r (t) | window | top | mid | low | rim |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1 sliced sun | (0.0, 0.012) | 0.222 | on | `#D2402E` Color(0.824, 0.251, 0.180) | `#D4326C` Color(0.831, 0.196, 0.424) | `#A42CC4` Color(0.643, 0.173, 0.769) | `#F27088` Color(0.949, 0.439, 0.533) |
+| 2 | 2 moon + cloud bands | (0.2, 0.86) | 0.075 | off | `#E4ECFF` Color(0.894, 0.925, 1.000) | `#B4C6FF` Color(0.706, 0.776, 1.000) | `#8FA6F0` Color(0.561, 0.651, 0.941) | `#FFFFFF` Color(1.000, 1.000, 1.000) |
+| 3 | 3 CRT screen | (0.0, 0.1) | 0.075 | on | `#B4400E` Color(0.706, 0.251, 0.055) | `#8A1F66` Color(0.541, 0.122, 0.400) | `#12082A` Color(0.071, 0.031, 0.165) | `#B89A3A` Color(0.722, 0.604, 0.227) |
+| 4 | 0 none | - | - | off | - | - | - | - |
+| 5 | 5 hex crystal | (0.0, 0.1) | 0.13 | on | `#6A44E0` Color(0.416, 0.267, 0.878) | `#4A2CB0` Color(0.290, 0.173, 0.690) | `#2A1A80` Color(0.165, 0.102, 0.502) | `#20A060` Color(0.125, 0.627, 0.376) |
+| 6 | 6 gate light | (0.0, 0.16) | 0.3 | off | `#8A5CFF` Color(0.541, 0.361, 1.000) | `#D63AF9` Color(0.839, 0.227, 0.976) | `#2A0C4A` Color(0.165, 0.047, 0.290) | `#FFD27A` Color(1.000, 0.824, 0.478) |
+
+Motif shapes in `sp = (t - motif_c) / motif_r` (port of `nb_sky.py`; `aa = fwidth(t.x)`):
+- **1 sliced sun** (world 1): the current disc, gradient low (sp.y -0.9) -> mid (0) -> top (0.8), slices `gap = clamp((0.35 - sp.y) / 1.35, 0, 1) * 0.6`, plus a rim: `motif_rim` where `r > 1 - 2.5 aa / motif_r` and `sp.y > 0.05`. Glow ring stays `mid * 0.18 * exp(-max(r - 1, 0) * 6)`.
+- **2 moon** (world 2): disc, gradient low -> top along `sp.y - 0.3 sp.x` (-0.9 to 0.7), rim on the upper left (`sp.x < 0.2 && sp.y > -0.2`). Two cloud bands painted over it in `sky_mid x 1.2` at 80% cover: band 1 centre sp.y 0.05, half height 0.07, from sp.x -1.6 to 0.7; band 2 centre -0.42, half height 0.05, from -0.4 to 1.7; both with `smoothstep` soft ends 0.3 wide. Halo `low * 0.25 * exp(-max(r - 1, 0) * 2.5)`. Static: clouds do not move.
+- **3 CRT screen** (world 3): rounded box screen half size (1.75, 1.0) corner 0.28, bezel to (1.95, 1.2) corner 0.36 in `#1A0C24`, 2 px `motif_rim` line on the bezel edge. Inside: `motif_low` with scanlines (x0.82 / x1.0 alternating, 18 per r unit), pixel hills (quantise sp to 0.1 cells; hill top `-0.17 + 0.22 sin(2.3 qx + 0.6) + 0.12 sin(5.7 qx)`) in `motif_mid`, pixel sun (quantised disc r 0.42 at (0.55, 0.25)) in `motif_top`. Static.
+- **5 hex crystal** (world 5): pointy-top hexagon stretched 1.3x in y: `d = max(|x|, 0.5|x| + 0.866|y|) / 0.866` with y = sp.y / 1.3. Six sectors alternate `motif_top` / `motif_mid`, lower half shaded toward `motif_low`, inner hexagon (d < 0.45) in `motif_top`, facet lines (sector borders outside d 0.45, the d = 0.45 ring and the outline) in `motif_rim`, 1.6 aa wide. Static.
+- **6 gate light** (world 6): no shape, adds `mid * 0.10 * exp(-1.6 r^2) + top * 0.12 * exp(-0.5 r^2)` behind the 3D ring gate.
+
+| World | stars col | gain | square | density | ridge col / gain / height / solid | nebula a / b / gain |
+|---|---|---|---|---|---|---|
+| 1 | `#FFEBF2` Color(1.000, 0.922, 0.949) | 0.6 | 0 | 0.975 | `#FF2E88` Color(1.000, 0.180, 0.533) / 1.0 / 1.0 / `#120618` | off (gain 0) |
+| 2 | `#DCE6FF` Color(0.863, 0.902, 1.000) | 0.35 | 0 | 0.985 | off (gain 0) | off (gain 0) |
+| 3 | `#FFE14D` Color(1.000, 0.882, 0.302) | 0.9 | 1 | 0.982 | off (gain 0) | off (gain 0) |
+| 4 | `#FFE6C8` Color(1.000, 0.902, 0.784) | 0.45 | 0 | 0.982 | `#FF3B30` Color(1.000, 0.231, 0.188) / 0.8 / 1.6 / `#0A0510` | off (gain 0) |
+| 5 | `#9CFFC8` Color(0.612, 1.000, 0.784) | 0.25 | 0 | 0.99 | off (gain 0) | `#1B2A4A` / `#123A34` / 0.5 |
+| 6 | `#FFF0F8` Color(1.000, 0.941, 0.973) | 0.8 | 0 | 0.965 | off (gain 0) | `#5A2CB0` / `#A0249C` / 0.55 |
+
+Nebula (worlds 5-6): `vec2 n = texture(nebula_tex, t * 0.6 + vec2(0.37, 0.11)).rg; c += (neb_a * smoothstep(0.40, 0.80, n.r) + neb_b * smoothstep(0.50, 0.85, n.g)) * neb_gain * smoothstep(-0.02, 0.15, t.y);` world 5 also multiplies by `1 - smoothstep(0.05, 0.45, t.y)` so the mist hugs the floor. One texture fetch per sky pixel; no fbm in the shader.
+
+Ridges: the current code with `ridge_height` multiplying `hill`, `ridge_solid` as the fill colour, and the wireframe term only in world 1 (`wire * 0.35` becomes `wire * 0.35 * wire_on`, wire_on = 1 for world 1 only). World 4 uses height 1.6 and no wire: a solid black mountain line with a red edge.
+
+### 11.4 Floor (sea.gdshader v2)
+
+New uniforms: `int mode` (0 grid, 1 checker, 2 road, 3 lattice), `vec3 base2` (checker), `vec3 dash_col, edge_col` (road). Lines keep the current anti-aliased `fract()` code; `period`, `width`, `gain`, `line_col`, `streak_col`, `haze_col`, `base` per world.
+
+- **grid**: as now.
+- **checker** (world 3): `base` and `base2` alternate on `floor(g.x) + floor(g.y)`, lines on top.
+- **road** (world 4): inside `|x| < 7.0` m use `#06040A` and no grid; lane dashes at `|x| = 3.5` m (half width 0.12 m), 6 m period, 50% duty, `dash_col` x 0.9; edge lines at `|x| = 7.0` m (half width 0.15 m) `edge_col` x 0.8; both multiplied by the distance fade. Dashes scroll toward the camera at 6 m/s (`wp.z + TIME * 6.0`); under "Mindre bevegelse" they stand still.
+- **lattice** (world 5): lines on `(x + z) / period` and `(x - z) / period` (diagonal diamonds).
+
+| World | mode | base (base2) | line | period m | width | gain | streak | haze | road dash / edge |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | grid | `#07041A` | `#D63AF9` Color(0.839, 0.227, 0.976) | 3.0 | 0.035 | 0.85 | `#FF7A3D` | `#9E1F4C` | - |
+| 2 | grid | `#040814` | `#3D7BFF` Color(0.239, 0.482, 1.000) | 2.0 | 0.03 | 0.8 | `#FFB547` | `#1D3C7A` | - |
+| 3 | checker | `#0F0716` (`#22102E`) | `#FFC93C` Color(1.000, 0.788, 0.235) | 2.5 | 0.025 | 0.75 | `#FF3D6E` | `#3A1838` | - |
+| 4 | road | `#0A0710` | `#5A1028` Color(0.353, 0.063, 0.157) | 4.0 | 0.03 | 0.6 | `#FF3B30` | `#3E0C1C` | `#FFB23D` / `#FF3B30` |
+| 5 | lattice | `#03070C` | `#6A4CFF` Color(0.416, 0.298, 1.000) | 2.5 | 0.03 | 0.45 | `#4DFF9A` | `#1B2A4A` | - |
+| 6 | grid | `#05030E` | `#FFD27A` Color(1.000, 0.824, 0.478) | 3.0 | 0.025 | 0.55 | `#8A5CFF` | `#2A0C4A` | - |
+
+### 11.5 Frame, bricks, lights and win-card rim per world
+
+| World | wall tube (albedo x2.2, unshaded) | rail albedo | win-card rim | brick ramp (top row first) | key light | fill (mock only) | ambient | ProceduralSky top / horizon |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `#FF2E88` Color(1.000, 0.180, 0.533) | `#15122B` Color(0.082, 0.071, 0.169) | `#FF2E88` Color(1.000, 0.180, 0.533) | sun, tangerine, coral, hotpink, magenta | `#D9E6FF` Color(0.851, 0.902, 1.000) x1.1 | `#FF7359` | 0.7 | `#1A0D4D` / `#D94073` |
+| 2 | `#3D7BFF` Color(0.239, 0.482, 1.000) | `#0C1430` Color(0.047, 0.078, 0.188) | `#3D7BFF` Color(0.239, 0.482, 1.000) | hotpink, coral, tangerine, sun | `#E0E8FF` Color(0.878, 0.910, 1.000) x1.1 | `#4D7BFF` | 0.6 | `#0B1C48` / `#3A6FD0` |
+| 3 | `#FFC93C` Color(1.000, 0.788, 0.235) | `#1E1020` Color(0.118, 0.063, 0.125) | `#FFC93C` Color(1.000, 0.788, 0.235) | sun, coral, hotpink, violet | `#FFF0D9` Color(1.000, 0.941, 0.851) x1.15 | `#FF8A3D` | 0.6 | `#1C0E2A` / `#C8501E` |
+| 4 | `#FF3B30` Color(1.000, 0.231, 0.188) | `#1A0A12` Color(0.102, 0.039, 0.071) | `#FF5A3C` Color(1.000, 0.353, 0.235) | coral, tangerine, sun, hotpink | `#FFE6D0` Color(1.000, 0.902, 0.816) x1.05 | `#FF3B30` | 0.55 | `#160818` / `#C0283A` |
+| 5 | `#4DFF9A` Color(0.302, 1.000, 0.604) | `#0A1A20` Color(0.039, 0.102, 0.125) | `#3DDC8A` Color(0.239, 0.863, 0.541) | mint, violet, magenta, hotpink | `#D9FFF0` Color(0.851, 1.000, 0.941) x1.05 | `#8A5CFF` | 0.6 | `#061624` / `#1E5A4E` |
+| 6 | `#8A5CFF` Color(0.541, 0.361, 1.000) | `#120A24` Color(0.071, 0.039, 0.141) | `#FFD27A` Color(1.000, 0.824, 0.478) | violet, magenta, hotpink, sun | `#F0E6FF` Color(0.941, 0.902, 1.000) x1.1 | `#D63AF9` | 0.6 | `#120828` / `#5A1C8A` |
+
+Tube colour stays the base of `_sync_tubes` (Neonrush still lerps toward `WHITE_HOT`). Cyan stays on the player's things only; no world uses cyan for tubes, bricks or vista (world 2's blue is `#3D7BFF`, hue 222 deg, against cyan's 188 deg). Win-card rim contrast against the dimmed scene (my calc): pink 5.5:1, blue 5.1:1, gold 12.6:1, red-orange 6.3:1, mint 10.9:1, gold 13.6:1. The card rim is UI chrome, so world 6 uses gold, never violet.
+
+### 11.6 Props and placements (Godot coordinates: x right, y up, z toward the camera, play plane z 0)
+
+All props are unshaded or lit opaque meshes, shadows off, no alpha blend. Every list below is one `MultiMeshInstance3D` per mesh (one draw call each). GLBs are in `assets/models/` (sizes and triangle counts in 12.8).
+
+**World 2 Rutenettbyen**
+- Skyline `CitySkyline_L0/L1/L2`: `prop_city_tower.glb` instances (14 x 8 x 53.6 m reference, scale x and y per instance), three layers at z -110, -180, -280; from x -150 to +150, width 9-20 m, gap 1-6 m, height ranges 8-30 / 18-50 / 30-78 m multiplied by `0.6 + 0.4 min(1, |x| / 50)` (lower in the middle so the ball zone stays dark). Seed the RNG with 2 so it is the same every run. Body colours `#0C1638`, `#0A1230`, `#081028`.
+- Window shader `shaders/windows.gdshader` (new, unshaded): cell 1.6 m wide x 2.0 m tall in object space, window = middle 50% x 40% of the cell, lit when `hash(cell) < density` (0.30 / 0.25 / 0.20 per layer); lit colour `#C08028` x 1.5 (unshaded albedo, may exceed 1). Static: no flicker.
+- Neon strips `CitySigns`: 4 vertical unshaded tubes r 0.45 m on the front layer at (x, y bottom, height): (-38, 9, 9) `#FF2E88`, (-12, 14, 7) `#3D7BFF`, (21, 11, 10) `#FF2E88`, (44, 16, 8) `#3D7BFF`, z -105.5, albedo x 2.4. **Never a ring, arrow or chevron**: those are portal and glider cues.
+- Moon: in the sky shader (motif 2). No 3D object.
+
+**World 3 Arkadehallen**
+- `ArcadeCabinets`: `prop_arcade_cabinet.glb` x 14, scale 2.8, rows at x = +-(7.0 + 0.9 k), z = -10 - 8 k, k 0-6, each turned to face the centre line 55 deg (y rotation = -55 deg on the right, +55 deg on the left). Marquee `#FFE14D` x 1.4, screens alternate `#FF3D6E` / `#3D7BFF` x 1.4. Body `#0B0612`, roughness 0.6.
+- `CeilingTruss`: box 30 x 1.0 x 0.8 m at (5.0, 42.6, -30.0), `#1A1020`, metallic 0.6, roughness 0.5. `TrussBulbs`: 14 spheres r 0.38 m at x = -8.6 + 2.1 k, y 41.7, z -29.4, unshaded `#FFE14D` x 3.0. The bulbs breathe 0.5 Hz between 75% and 100% on alternate bulbs (a sine, never on/off; static under "Mindre bevegelse").
+
+**World 4 Nattveien**
+- `LampPosts`: `prop_lamp_post.glb` (pole 9 m, arm reaching 2.4 m toward the road), x = +-9.0, z = -20 - 24 k, k 0-15 (32 instances, the right side turned 180 deg). Head `#FFB23D` x 1.6 unshaded. `LampPools`: additive quads 8 x 12 m flat on the road under the first 8 per side, `#FFB23D` at 18%, radial gradient texture (the existing `_halo_tex`).
+- `LightStreaks`: 4 unshaded quads 0.12 m wide from z -14 to -434 at y 0.6: x 3.1 and 3.9 `#FF3B30` x 1.6 (tail lights), x -3.1 and -3.9 `#FFE6C8` x 1.6 (head lights). A UV-scrolled dash mask (period 18 m, 70% duty, 20 m/s away from the camera on the right, toward it on the left) makes them "pass"; static under "Mindre bevegelse".
+- `Overpass`: box 120 x 3 x 6 m at (0, 55, -45), `#0E0812`, roughness 0.7; `OverpassLamps`: 14 boxes 1.2 x 0.35 x 0.4 m at x = -19.5 + 3 k, y 53.3, z -41.9, unshaded `#FFB23D` x 3.0 (outside the glass, so allowed bright).
+
+**World 5 Krystallgrotta**
+- `CrystalClusters`: `prop_crystal_cluster.glb` (3.7 m tall reference) at (x, z, scale): (-12, -16, 0.9) violet, (12.5, -20, 1.0) mint, (-30, -60, 3.3) mint, (34, -70, 3.5) violet, (-70, -150, 6.0) violet, (80, -160, 6.5) mint. Violet material: albedo `#2A1A80`, emission `#4A2CB0` energy 0.9, roughness 0.1, clearcoat 1.0. Mint material: albedo `#0E3A2C`, emission `#1E7A52` energy 0.9, roughness 0.1, clearcoat 1.0. Keep tops below screen y 980 (t.y 0.24).
+- `CaveCeiling`: box 90 x 10 x 4 m at (0, 50, -30), albedo `#07101A`, emission `#0B2A26` energy 0.8. `Stalactites`: `prop_stalactite.glb` x 10 at x = -7 + 3 k (+-0.5 jitter), base at y 45.2, z -29, height 1.6-3.0 m (scale y), tips unshaded `#4DFF9A` x 3.0. Tips must stay above screen y 240 and outside the home square.
+- `MistCards`: 2 quads 160 x 3.5 m at (0, 1.5, -35) and (0, 3.0, -70), `#1B2A4A` additive at 30%.
+
+**World 6 Stjerneporten**
+- `RingGate`: `prop_ring_gate.glb` (R 40 m, 24 segments, 24 beads), facing the camera, at (0, 27.6, -120): its inner opening frames the field (t radius about 0.30). Segments albedo `#2A1A5A`, metallic 0.7, roughness 0.25, emission `#5A2CB0` energy 0.9; beads unshaded `#FFD27A` x 1.6. It rotates 0.02 rev/min around z (barely visible, parallax only; static under "Mindre bevegelse"). The lower part passes through the floor plane; that is intended.
+- `Planet`: sphere r 23 m at (104, 367, -400), albedo `#3A1C6A`, emission `#120828` 0.5, plus a gold terminator: a second sphere r 23.2 m offset (-5, +3, -6) unshaded `#FFD27A` x 1.6 drawn behind it (reads as a lit crescent). Outside the home square.
+- Nebula and gate light: sky shader.
+
+### 11.7 Four questions (worlds 2-6 vista features)
+
+| Feature | Noticed at camera distance? | Phone cost | Cheaper trick used | Fits spec? |
+|---|---|---|---|---|
+| Sky motif per world | Yes, it is the world's face | 0 extra draws (same sky quad, a few ALU ops) | Shader, not geometry | Yes |
+| Glass window behind the motif | Yes (fixes the muddy sun) | 0 extra draws, a few ALU on the glass quad | Instead of brighter glass | Yes |
+| City skyline + windows | Yes | 3 draws, about 6k tris, 1 hash per pixel | Window grid in shader, no texture | Yes |
+| Arcade cabinets, lamp posts, crystals, stalactites | Yes as silhouettes | 1 draw per MultiMesh, under 10k tris each | MultiMesh | Yes |
+| Ring gate | Yes, frames the field | 1 draw, 2.4k tris | Beads are geometry, glow from shader | Yes |
+| Nebula | Yes, sky band | 1 texture fetch per sky pixel | Baked 512 px texture instead of fbm | Yes |
+| Moving light streaks / road dashes | Yes, sells "highway" | UV scroll only | No geometry motion | Yes, off under Mindre bevegelse |
+| Real lights on lamp posts | No (glass dims them) | 1 omni each | Emissive heads + additive pools | Cut |
+
+Budget per world stays within 7e: vista 6-9 draw calls, worst world 4 about 34k vista triangles (32 lamp posts x 324 + road + mountains).
+
+---
+
+## 12. New elements in worlds 2-6 (look specs)
+
+Sheet: `docs/mockups/elements_w26.png`. Every element has a **shape** cue; colour is decoration (rule 36). Flash rule unchanged: at most 3 glow spikes per second through `NbFlashLimiter`, no full-screen flash, no on/off blinking.
+
+### 12.1 Bryter / Switch `S` (`brick_switch.glb`, 1828 tris)
+- Body: dark steel `#3A4052` Color(0.227, 0.251, 0.322), metallic 0.8, roughness 0.30, **no rim tube** (like chrome: no glow on the body means "does not break"), no stripes and no bolts (that is chrome's cue).
+- Button: domed disc r 0.15 m `#1A1C26`, clearcoat 1.0, with a polished bezel ring r 0.165 m (`#C9CED8`, metallic 1.0, roughness 0.2) and the power symbol (open ring r 0.085 m + bar) in `#FFF4D6` Color(1.000, 0.957, 0.839), emission energy 3.5. Ring vs body 9.4:1 (my calc).
+- Set marks: a square (0.09 m) at x -0.33 = set A, a round dot (r 0.05 m) at x +0.33 = set B. The mark of the set that is **solid now** is lit (`#FFF4D6`, energy 3.5), the other is dark `#4A4F60` (no emission). So the switch tells the child which shape is solid, by shape.
+- Hit: button presses in 0.03 m over 60 ms and back over 120 ms; the power symbol energy 3.5 -> 7 -> 3.5 over 200 ms, through the limiter (it is one spike). The marks swap at the same moment. Under "Mindre bevegelse": no press motion, marks swap.
+
+### 12.2 Skygge / Ghost `A` / `B` (`brick_ghost_a.glb`, `brick_ghost_b.glb`)
+- Solid: the normal candy brick body in the row colour (brick shader, as glass) **without** the rim tube, plus a dashed outline: 12 dashes, 45% duty, tube r 0.011 m, `#FFF4D6` emission 3.0, sitting on a dark keyline `#1A0614` (r 0.020 m, 47% duty) so the dashes read 3:1 or better on any candy fill (white dash on coral alone is 2.8:1, my calc; with the keyline the mark is dark-on-candy at 5:1 or better).
+- Set A corner marks: L-brackets 0.13 x 0.11 m, tube r 0.028 m, keyline r 0.040 m. Set B corner marks: round dots r 0.05 m, keyline dots r 0.065 m.
+- Phased: body hidden; a faint haze body at 8% alpha in the row colour, outline and marks in `#FFF4D6` at **30% alpha**, no keyline, no emission spike. The ball passes through.
+- Render: ghosts are their own two MultiMeshes `GhostsA` and `GhostsB` with one ShaderMaterial (uniform `phase` 0 solid -> 1 phased; alpha mix, depth write on only when solid). Switch toggle: 0.25 s ease-in-out cross-fade, both sets at once (one set goes 0 -> 1 while the other goes 1 -> 0). Not a flash. Under "Mindre bevegelse": instant.
+
+### 12.3 Ormehull / Portal pairs `1` / `2` (`portal_1.glb`, `portal_2.glb`)
+- Size: ring r 0.40 m (exactly the 40 px logic radius), tube r 0.03 m, so what the child sees is the trigger area.
+- Hole: disc `#05020C` Color(0.020, 0.008, 0.047), clearcoat 1.0, so it reads as a hole.
+- Pair 1: ring and one spiral arm (2.6 turns from r 0.05 to 0.35 m) in `#9CFFC8` Color(0.612, 1.000, 0.784); ring emission 4.0, arm 2.5.
+- Pair 2: ring and **two** spiral arms (from r 0.15 to 0.35 m) plus a 5-point star r 0.14 m in the centre, all `#FFD27A` Color(1.000, 0.824, 0.478); ring 4.0, arms 2.5, star 4.0. Shape difference: one arm vs two arms + star. Ring vs hole 17.2:1 and 14.5:1 (my calc).
+- Motion: spiral arms rotate 0.25 rev/s (ring and star still); static under "Mindre bevegelse".
+- Teleport: both portals of the pair scale 1.0 -> 1.15 -> 1.0 over 150 ms (no emission spike); the ball's trail is cut at the entry and restarts at the exit (no streak drawn across the field).
+
+### 12.4 Saktetid (tape slow) capsule and state (`capsule_saktetid.glb`)
+- Capsule: the shared capsule (dark glass, cyan rim) with a white cassette icon: rounded window 0.62 x 0.30 m outline, two reels r 0.075 m with three spokes each, a tape line under them.
+- While falling: the reels spin 1 rev/s (the capsule body spins as all capsules do); static under "Mindre bevegelse".
+- Active state on the ball: the cyan ribbon trail is replaced by a **dotted trail** of 8 dots, every 24 px along the path, radius shrinking from 7.5 to 0.75 px (mesh: 8 small quads, additive, `#FFE6C8` Color(1.000, 0.902, 0.784) at 80%). Dots read "slow motion" without any count or text. Ending: over the 0.5 s wind-up the dots fade and the ribbon fades back in.
+- No colour grade, no screen tint (a field-wide change would be a large glow change and costs a pass).
+
+### 12.5 Skjoldnett (shield net) capsule (`capsule_skjoldnett.glb`)
+- Icon: a net line with a zigzag under it and a plus sign above, white.
+- Catch (Vanlig): a new white diamond pip drops from the paddle to its place on the net over 0.25 s ease-out and lands with a small ring (radius 0 -> 40 px, alpha 0.6 -> 0, 200 ms, additive cyan). At 3 pips (max) the capsule still plays the drop, onto the existing third pip. Lett: carriers drop Bredvinge instead (GDD 5.2), so no Skjoldnett look is needed there.
+
+(Bredvinge `capsule_bredvinge.glb` and Neonpuls `capsule_neonpuls.glb` icons are exported too, replacing the slice placeholders: winged paddle; paddle with three arcs.)
+
+### 12.6 Bosses (3 x 2 cells, hit box 2.92 x 0.96 m)
+
+Shared core (all bosses, all worlds, replaces the placeholder): dark glass disc r 0.30 m `#140F2E` (clearcoat 1.0), core ring r 0.24 m tube 0.035 m `#FFF4D6` emission 4.0, and **health notches built in code**: N = max HP boxes 0.032 x 0.075 x 0.03 m on a circle r 0.355 m around the core centre, starting at 12 o'clock, clockwise, each rotated to point outward. Alive: unshaded boss accent colour x 4.0; dark: `#2A2238`, no emission. One notch goes dark per point of damage (GDD 15.5). With 36 notches they are 6 cm apart at 2.92 m; still separable at 1080 px (6 px gaps). The GLBs contain the body, disc and ring only.
+
+| Boss | GLB (tris) | Silhouette | Materials | Accent (notches) | Core centre in the box |
+|---|---|---|---|---|---|
+| L20 Lastebilen | `boss_lastebilen.glb` (2980) | A lorry seen from the side: trailer box (1.95 x 0.74 m) left, chrome cab with a slanted dark window right, 4 wheels with chrome hubs, 6 amber marker lamps along the trailer top, 4 white ribs. No face (side view, no headlights). | Trailer `#FF3B30` roughness 0.18, clearcoat 1, emission `#FF3B30` 0.35; cab `#C9CED8` metallic 1, roughness 0.22; window `#140F2E`; tyres `#0C0A12`; lamps `#FFB23D` x 5 | `#FFB23D` amber | (-0.46, +0.06) m: on the trailer side |
+| L25 Krystallhjertet | `boss_krystallhjertet.glb` (1416) | An elongated six-sided gem (2.8 x 0.84 m) with mint facet lines and two mint spikes at the upper corners; the core sits inside the gem | Gem `#8A5CFF` roughness 0.08, clearcoat 1, emission `#8A5CFF` 0.7; edges `#4DFF9A` x 5 | `#4DFF9A` mint | (0, 0) |
+| L30 Neonnova | `boss_neonnova.glb` (1424) | A cut-corner octagon casing (never a stadium pill: that shape belongs to capsules) with a gold rim tube, a magenta 4-point glow star and a pale-gold 4-point spike star behind the core (the Nova brick's shape, so the child links it to the Nova ring around it) | Casing `#140A2A` metallic 0.4, roughness 0.12, clearcoat 1; rim `#FFD27A` x 5; glow `#D63AF9` x 2; spikes `#FFE7A0` x 5 | `#D63AF9` magenta | (0, 0) |
+
+Neonnova's spike tips overhang the hit box by 4 cm top and bottom; visual only, the hit box stays 292 x 96 px.
+
+Boss events (through the limiter): hit = squash 95% 80 ms + one notch goes dark + a spark at the contact point; phase roar = core ring energy 4 -> 8 -> 4 over 0.6 s (one spike); defeat = core ring scales to 0 over 0.4 s (implode) + 3 shard bursts 0.15 s apart in the accent colour. Krystallhjertet's portal jump (GDD 15.9): scale 1 -> 0 over 0.25 s with a 180 deg z spin at the old spot, 0 -> 1 over 0.25 s with the reverse spin at the new spot; under "Mindre bevegelse" a 0.2 s alpha cross-fade instead.
+
+### 12.7 Bricks shown for the first time in mocks
+Triple (`brick_triple.glb`, three dots in a triangle, 1372 tris), Glider (`brick_glider.glb`, chevrons, 780), Nova (`brick_nova.glb`, 4-point star r 0.15 m emission 4, 728). They match section 7b; use them for the win-card thumbnails and the 2-segment MultiMesh copies (7e).
+
+### 12.8 GLB list added 2026-10-07 (metres, Y-up, front +Z, origin centre)
+
+| File | Size x / depth / y (m) | Tris | Material names (stable, look them up by name) |
+|---|---|---|---|
+| brick_switch | 0.92 / 0.38 / 0.44 | 1828 | switch_body, switch_btn, switch_bezel, switch_ring, switch_mark_off |
+| brick_ghost_a / _b | 0.92 / 0.34 / 0.44 | 2540 / 3180 (solid look; phased is the same mesh with the ghost shader) | brick_*, ghost_line_100, ghost_key |
+| portal_1 / portal_2 | 0.86 / 0.08 / 0.86 | 1896 / 2712 | portal_hole, portal_ring1/2, portal_arm1/2, portal_star |
+| capsule_saktetid / skjoldnett / bredvinge / neonpuls | 1.12 / 0.32 / 0.56 | 1350-2300 | capsule_body, capsule_rim, capsule_icon |
+| boss_lastebilen / krystallhjertet / neonnova | 2.92 / 0.49-0.53 / 0.89-1.04 | 2980 / 1416 / 1424 | see 12.6 |
+| paddle_vanlig_280 / paddle_lett_400 (v2, replace v1) | 2.80 or 4.00 / 0.41 / 0.36 | 1840 | paddle_body, paddle_plate, **paddle_light** (unchanged name), paddle_cap |
+| prop_city_tower | 14 / 8 / 53.6 | 176 | tower_body |
+| prop_arcade_cabinet | 0.82 / 1.02 / 2.0 | 308 | cab_body, cab_marquee, cab_screen |
+| prop_lamp_post | 2.68 / 0.35 / 9.0 | 324 | pole, lamp_head |
+| prop_crystal_cluster | 3.7 / 2.2 / 3.9 | 154 | crystal_vio |
+| prop_stalactite | 1.46 / 1.43 / 2.56 | 92 | rock, stal_tip |
+| prop_ring_gate | 86.4 / 4.5 / 86.4 | 2400 | gate_body, gate_bead |
+
+The v1 paddle GLBs stay available in git history.
+
+---
+
+## 13. QA look fixes (QA_SLICE_2026-10-06 section 5)
+
+All four were prototyped in a scratch copy of the game (not in this repo) and captured with the real Godot Mobile renderer on 2026-10-07; the numbers below are the ones that produced the good capture.
+
+### 13.1 Sun reads muddy ochre -> neon (0 extra draw calls)
+
+Cause: sun `#FFC93C` x `sun_gain` 0.9 through 72% black glass = (137, 107, 28) linear-correct (QA saw (139, 103, 29)). Yellow at that brightness is ochre, and it cannot get brighter without breaking the ball's 4.5:1 (11.0).
+
+Fix, three parts:
+1. **New sun colours** (what the player sees through the window): `sun_top #D2402E` Color(0.824, 0.251, 0.180), `sun_mid #D4326C` Color(0.831, 0.196, 0.424), `sun_low #A42CC4` Color(0.643, 0.173, 0.769), `sun_rim #F27088` Color(0.949, 0.439, 0.533) (2.5 px rim on the upper half). Remove `sun_gain`. Add `uniform float sun_hdr = 2.222;` (= 1 / (1 - 0.55)). The haze line uses a new `haze_col` (world 1 `#FF2E88`) instead of `sun_low`.
+2. **Unclamped sun**: `ALBEDO = mix(min(c, vec3(0.98)), sc * sun_hdr, sun);` where `sc` already includes the rim. The highest source value is about 1.5, inside the Mobile renderer's 0-2 HDR range.
+3. **Glass window**: replace the field `StandardMaterial3D` with `shaders/field_glass.gdshader` (unshaded, `blend_mix`, `depth_draw_never`, `cull_disabled`): `base_alpha 0.72`, `window_alpha 0.55`, window centre/radius = the motif's `motif_c`/`motif_r`, computed from the view direction exactly like the sky (`t = d.xy / max(-d.z, 0.05)`) so it follows the sun under camera drift. `win = (1 - smoothstep(1.03, 1.30, rr)) * smoothstep(0.0, 0.04, t.y)`; `ALPHA = mix(base_alpha, window_alpha, win)`; world 3 uses a box distance `max(|sp.x| / 1.95, |sp.y| / 1.2)`; worlds 2, 4 and 6 set `window_on = 0`.
+
+Result in Godot (my calc on the capture): sun centre (210, 64, 61), previously (139, 103, 29). Ball vs sun 4.6:1. Mock: `world1_fix_mock.png`.
+
+### 13.2 Paddle reads as a thin outline -> lit body (0 extra draw calls)
+
+Use the re-exported `paddle_vanlig_280.glb` / `paddle_lett_400.glb` (already in `assets/models/`; `_set_paddle()` finds `paddle_light` as before). Material values (glTF carries them; if the importer drops clearcoat, set it on `paddle_body` / `paddle_plate` in code):
+- `paddle_body`: albedo `#4A5578` Color(0.290, 0.333, 0.471), metallic 0.35, roughness 0.32, clearcoat 1.0 (clearcoat roughness 0.05), emission `#263052` Color(0.149, 0.188, 0.322) energy 1.0.
+- `paddle_plate` (new inset face panel inside the light loop, 0.02 m proud): albedo `#6A7AA6` Color(0.416, 0.478, 0.651), metallic 0.3, roughness 0.28, clearcoat 1.0, emission `#2E3C66` Color(0.180, 0.235, 0.400) energy 1.0.
+- `paddle_light` unchanged (cyan, energy 7; touch +40%), `paddle_cap` unchanged.
+In Godot the face now reads as a solid blue-steel bar inside the cyan loop. The cyan strip stays the brightest cool thing on screen. I tried an additive under-glow quad and cut it: it read as a second, larger pill.
+
+### 13.3 Win card is a flat cream slab -> neon rim (0 extra draw calls, still `_draw()`)
+
+In `NbWinCard._draw()`, replace the dark offset shadow and the 4 px edge with three `StyleBoxFlat`s (all `anti_aliasing = true`):
+1. Card: `bg_color CARD`, corner radius 56, `border_color = rim`, border width 6, `shadow_color = Color(rim, 0.55)`, `shadow_size = 28`, `shadow_offset = Vector2.ZERO`, drawn on `CARD_RECT`. The soft shadow is the glow.
+2. Hot core line: `draw_center = false`, corner radius 54, border 2 px `Color(1.0, 0.92, 0.95)`, on `CARD_RECT.grow(-2)`.
+3. Inner keyline: `draw_center = false`, corner radius 50, border 3 px `CARD_EDGE`, on `CARD_RECT.grow(-6)` (keeps the card edge readable for ink-on-cream).
+`rim` = the world's card-rim colour (11.5), passed in through `show_card(..., world_id)`. Remove the `SHADOW` offset slab. The 250 ms fade-in is unchanged. Fill and icons unchanged (light card, ink icons, no purple).
+
+### 13.4 Seam at the frame top (x 0-30, y 235-265)
+
+Cause: the top rail was exactly 10.8 m (screen width) with rounded end caps at the screen edge, and the side rails overlapped it with their own rounded tops.
+In `NbWorld._build_frame()`:
+- Top rail mesh `Vector3(12.4, 0.4, 0.4)` (0.8 m past each edge, covers the +-1.5 deg drift).
+- Side rails stop under it: height `z_top - z_bot`, position y `(z_top + z_bot) * 0.5` (no +0.4 / +0.2).
+- Rail material: metallic 0.4, roughness 0.6 (was 0.6 / 0.45) and albedo = the world's rail colour (11.5).
+Captured result: the rail runs as one band to the screen edge; the grey corner block is gone.
+
+The plain sky above the field (QA 5, second half) is answered by the sky-band signatures in 11.1: moon, bulb truss, overpass, stalactites, planet. World 1 keeps its stars (owner-approved hero scene).
+
+### 13.5 Build order for these fixes (one session)
+1. 13.1 sun + `field_glass.gdshader` (world 1 only first). 2. 13.2 paddle (GLBs already swapped). 3. 13.4 rails. 4. 13.3 card rim. 5. Recapture `01`, `02`, `04` and compare to `world1_fix_mock.png`; the sun centre pixel should read about (210, 64, 61).

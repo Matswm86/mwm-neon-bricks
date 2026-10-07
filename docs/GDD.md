@@ -1,6 +1,6 @@
 # MWM Neon Bricks: game design doc
 
-Version 2, 2026-10-06, game-designer (version 1 2026-10-05; version 2 = the action pass in section 15 after the owner said world 1 "gets boring fast"; where section 15 and an older section disagree, section 15 wins). Game renamed from "Brick Nova" to **MWM Neon Bricks** on 2026-10-05 (trademark conflict). Use the new name everywhere, including save file, class names and voice lines.
+Version 3, 2026-10-07, game-designer (version 1 2026-10-05; version 2 2026-10-06 = the action pass in section 15 after the owner said world 1 "gets boring fast"; version 3 = worlds 4-6 and the level 10 fix in section 16. Where sections disagree, the higher section number wins). Game renamed from "Brick Nova" to **MWM Neon Bricks** on 2026-10-05 (trademark conflict). Use the new name everywhere, including save file, class names and voice lines.
 
 Target: Android, portrait 1080x1920, Godot 4.6 `mobile` renderer, stand-alone app first, later a game inside MWM Play (ages 4-7 and 8+). Visuals belong to graphic-designer (`docs/DESIGN.md`); this doc only lists game-feel hooks.
 
@@ -78,7 +78,7 @@ Gameplay is simulated in a flat 2D logic plane in design px and rendered in 3D (
 ### 4.4 Anti-stuck rules (apply in this order every frame)
 
 1. **Floor on vertical speed:** `|v.y| >= sin(20 deg) * speed` (Krypton Egg used 0.25; ours is 0.342). Keep the sign, recompute `v.x` from speed. No ball travels flatter than 20 degrees from horizontal.
-2. **Chrome jitter:** every bounce off a chrome brick or portal rim rotates the velocity by a random -3 to +3 degrees (still subject to rule 1). Walls have no jitter (feels unfair at the paddle).
+2. **Chrome jitter:** every bounce off a chrome brick or a switch (v3: portals have no rim and no bounce, 16.2.3) rotates the velocity by a random -3 to +3 degrees (still subject to rule 1). Walls have no jitter (feels unfair at the paddle).
 3. **Loop detector:** on every wall or unbreakable-brick bounce, record (cell of contact rounded to 20 px, velocity octant). If the same record appears 3 times within 10 s with no breakable-brick hit and no paddle touch, rotate the velocity by 9 degrees toward the side with more remaining bricks, play a soft "zip" and show a short spark trail (no flash).
 4. **Dry-spell timer:** if 10 s pass with no paddle touch and no brick hit (ball trapped above in chrome), apply the same 9 degree nudge, then repeat every 5 s.
 5. **Helping hand (aim assist):** if `ASSIST_S` seconds pass with no brick broken (Lett 15, Vanlig 30), the next paddle bounce aims at the nearest SOLID breakable brick **that the ball can reach** (line-of-sight and bank-shot rule in section 15.3.4; aiming straight into chrome trapped the sim forever on a chrome level) (angle clamped to +-MAX_BOUNCE_DEG). If none is solid (only phased ghosts left), aim at the nearest switch. The target brick glows softly for 1.0 s before the bounce (rule 18 idle-hint pattern). This kills the classic "hunting the last brick" frustration.
@@ -115,9 +115,10 @@ Every type has a shape cue so colour is never the only cue (rule 36). Suggested 
 | `T` | Trippel / Triple | 3 | Three dots in a triangle; one pops per hit | Breaks on 3rd hit | 6 |
 | `N` | Nova | 1 | Four-point star on the face | On break, 0.15 s later deals 1 hit to its 8 neighbours. A nova set off by a nova waits 0.35 s more, so bursts stay at 3 per second or fewer (rule 37). Blast area: section 15.3.5. | 3 (was 11) |
 | `M` | Glider | 1 | Chevrons `< >` on both ends | Slides horizontally at 120 px/s (Lett 80) along its row, reversing at walls, chrome or other bricks. Start direction: toward the field centre (c0-c4 move right, c5-c9 left). | 7 (was 16) |
-| `S` | Bryter / Switch | never | Ring with a dot in it (power symbol) | Not counted. A hit toggles which ghost set is solid. 0.5 s cooldown. | 16 (was 21) |
+| `S` | Bryter / Switch | never | Ring with a dot in it (power symbol) | Not counted. A hit toggles which ghost set is solid. 0.5 s cooldown. Full rules incl. auto flip: 16.2.1. | 16 (was 21) |
 | `A` / `B` | Skygge / Ghost (set A, set B) | 1 when solid | Set A: dashed outline with square corner marks. Set B: dashed outline with round dots. Solid = filled + outline; phased = outline only, 30% opacity. | Set A starts solid, set B phased. Phased ghosts let the ball through. Counted for clear. | 16 (was 21) |
-| `1` / `2` | Ormehull / Portal pair 1, pair 2 | never | Pair 1: single spiral. Pair 2: spiral with a star in the middle | Ball centre entering a portal circle (radius 40) leaves its partner 60 px along its velocity, velocity unchanged; 0.4 s per-ball cooldown. Not counted. | 21 (was 26) |
+| `1` / `2` | Ormehull / Portal pair 1, pair 2 | never | Pair 1: single spiral. Pair 2: spiral with a star in the middle | Ball centre entering a portal circle (radius 40) leaves its partner 60 px along its velocity, velocity unchanged; 0.4 s per-ball cooldown; max 3 hops between paddle or brick touches (16.2.3). Not counted. | 21 (was 26) |
+| `O` | Magnet / Magnet | 2 | Ring with four inward chevrons | Bends a ball within 170 px toward itself (16.2.5). | 26 (v3) |
 | `K` + `+` | Sjef / Mini-boss | 10-30 (per level) | 3x2 cells, a core ring in the middle, one notch per HP around it | Section 15.3.6. `K` = top-left anchor cell, `+` = the other 5 cells it covers. | 5 |
 
 Carrier mark: a lowercase letter (`g`, `d`, `t`, `n`, `m`) is the same brick carrying a power-up capsule, drawn with a small 5-point star inlay. The capsule drops when the brick breaks. The level data says which power-up its carriers hold: v2 uses a `carriers` list assigned round-robin in reading order (section 15.8).
@@ -158,7 +159,7 @@ Capsule: 112 x 56 pill with the power-up icon (shape-coded). Falls at 240 px/s (
 | 3 | Arkadehallen / Arcade Hall | Giant cabinets, pixel stars | March block (L11, L12) | Neonpuls (L13); boss Arkadekongen (L15) |
 | 4 | Nattveien / Night Highway | Endless road, passing lights | Switch + Ghost (L16) | Saktetid (L18); boss (L20) |
 | 5 | Krystallgrotta / Crystal Cave | Glowing crystals, mist | Portal (L21) | Skjoldnett (L23); boss (L25) |
-| 6 | Stjerneporten / Star Gate | Space, rings, nebula | Remix + one new element (open question) | Final boss Neonnova (L30) |
+| 6 | Stjerneporten / Star Gate | Space, rings, nebula | Magnet (L26), two march blocks (L27) (v3, 16.1) | Final boss Neonnova (L30) |
 
 v2 (section 15): elements arrive 2-3 times sooner than in v1, so world 1 alone shows Glass, Double, Nova, Komet, Ekko and a boss. Chrome moved to level 9 because a wall that never breaks is the least fun thing to meet early.
 
@@ -171,6 +172,8 @@ v2 (section 15): elements arrive 2-3 times sooner than in v1, so world 1 alone s
 **Superseded 2026-10-06 by section 15.7** (maps for levels 1-15, revised world 1 included). Level data format additions are in 15.8. The v1 world 1 maps that shipped in the slice are in git history (commit `827bbc8`, `scripts/NbLevels.gd`).
 
 ### 6.5 Endless generator ("Neonveien", after the 30 levels)
+
+**Superseded 2026-10-07 by section 16.9** (one spec covering all elements). Kept below for history.
 
 Shown as the last page of the world map. Available when `full_unlock` is true and world 1 has been cleared (my call). Endless level k = 1, 2, 3 ... is deterministic: same k, same layout.
 
@@ -439,7 +442,7 @@ Sim effect (my calc): the last 3 bricks take 3.5-8.5 s in Vanlig instead of 15-2
 
 `aim_point(from, direct_only)`:
 1. Sort alive breakable bricks (boss included) by distance from the ball centre.
-2. Return the first brick whose centre has a **clear path**: sample the segment from ball centre to brick centre every 10 px; the path is blocked only if the ball circle (radius 22) at a sample overlaps a non-breakable piece (chrome, switch, portal rim). Breakable bricks never block, because hitting any of them is progress.
+2. Return the first brick whose centre has a **clear path**: sample the segment from ball centre to brick centre every 10 px; the path is blocked only if the ball circle (radius 22) at a sample overlaps a non-breakable piece (chrome, switch) or comes within 62 px of a portal centre (v3, 16.2.3). Breakable bricks never block, because hitting any of them is progress.
 3. If none and not `direct_only`: try a **one-wall bank shot** for each brick in the same order: mirror the brick centre over x = 62 (left wall + radius) or x = 1018 (right wall - radius); the shot is valid if both legs (ball to wall point, wall point to brick) are clear. Aim at the mirrored point.
 4. If still none: no aim; the normal bounce and the dry-spell nudges take over.
 
@@ -802,7 +805,9 @@ Keep `rows`, `lett_speed`, `vanlig_speed`, `vanlig_paddle`, `vanlig_net` (0 = un
 
 Colour ramps for worlds 2 and 3 belong to graphic-designer (DESIGN.md). Until they exist, use the world 1 ramp rotated by one step per world so levels at least differ (placeholder, my call).
 
-### 15.9 Later phase: levels 16-30 (not in this build)
+### 15.9 Later phase: levels 16-30 (superseded)
+
+**Superseded 2026-10-07 by section 16** (exact rules, maps, numbers and sim for levels 16-30). The outline below is history; names and maps changed.
 
 Outline only; maps and sim come after the owner has played 1-15 on the phone. Speeds: Lett 550 / 560 / 570, Vanlig 830 / 860 / 880 for worlds 4 / 5 / 6. Vanlig paddle 260 / 240 / 240. Every 5th level is a boss with unlimited net.
 
@@ -849,4 +854,498 @@ Update `tools/action_sim.py` maps if a map changes, rerun it, and paste the new 
 5. **Boss levels as the 5th level:** the old 5th level was a calm breather. I made it a boss fight that keeps the breather's safety (unlimited net, more capsules). OK, or keep a calm breather and move the boss to level 4?
 6. **Komet in level 1:** a capsule in the very first level gives action early but is one more thing for a 4-year-old. With the Lett magnet it needs no skill. OK?
 7. **Combo shake in Vanlig:** 3 px per break at combo 10+, at most 3 per second. Keep, or no shake at all outside the last brick?
-8. **World 6 new element:** levels 26-30 have no new brick yet. Ideas: a "Splitter" brick that breaks into two small falling Glass bricks the ball can still hit, or a "Magnet" brick that bends the ball's path when it passes. Pick one, or none?
+8. **World 6 new element (decided 2026-10-07: Magnet, see 16.1; the owner may overrule, 16.12 question 9):** levels 26-30 had no new brick yet. Ideas: a "Splitter" brick that breaks into two small falling Glass bricks the ball can still hit, or a "Magnet" brick that bends the ball's path when it passes. Pick one, or none?
+
+---
+
+## 16. Worlds 4-6, levels 16-30 (2026-10-07)
+
+The owner played levels 1-15 on his phone on 2026-10-07, said they work, and asked for the rest. This section replaces the outline in 15.9 and the endless spec in 6.5. Where it disagrees with an older section, this section wins. Child rules kept: no game over in Lett, unlimited net on every boss level in both settings, at most 3 bright flashes per second (every new glow goes through the existing limiter), colour is never the only cue (every new piece has a shape cue), no new tap targets in play (the game stays drag-only; map discs stay 200 px with a 240 px hit area).
+
+### 16.1 Decisions in this section (my calls unless marked)
+
+1. **World 6 element (open question 8): Magnet** (`O`), a 2-hit brick that bends the ball toward itself. Not Splitter: falling bricks look like capsules and would teach a 4-year-old the wrong thing. World 6 also gets **two march blocks** (L27) as its level mechanic.
+2. **Level 10 gap fix:** Vanlig boss HP 20 -> 16 (level data; the map is unchanged). Verified in the real game loop (16.6).
+3. **Ghost flip timer:** ghosts also flip by themselves every 7 s, with a 1 s warning. Without it, phased ghosts the ball cannot reach made Lett levels run 110-120 s with 15-30 s gaps (my calc, first draft of 16, 18 and 19).
+4. **Finale makes every ghost solid:** at 3 bricks left (Lett 4) the switches go dark and the ghosts left stay solid, so the end of a level is never a ghost hunt.
+5. **Portal hop guard:** a ball may use portals at most 3 times between two paddle or brick touches. Two portal pairs plus two walls made an endless loop in the first L28 draft (my calc).
+6. **Map rules with a lint** (16.4), enforced by `tools/action_sim.py` for hand maps and by the endless generator.
+7. **The sim now models paddle english** (GDD 4.3) and the game bot's hold rule. The v2 sim left them out, which is why it showed 7.7 s for level 10 while the game showed 11-13 s.
+
+### 16.2 New elements (exact rules)
+
+#### 16.2.1 Switch `S` + Ghost `A` / `B` (first level 16)
+
+- **Switch `S`:** one cell, hit box 92 x 44 like a brick. Never breaks, not counted for the clear, bounces every ball like chrome, including the +-3 degree jitter (4.4 rule 2). Blocks line of sight for `aim_point` (15.3.4).
+- **Ghost state:** one flag per level, `ghost_a_solid`, `true` at level start and after a gentle restart. Set A is solid when it is true, set B when it is false.
+- **Flip:** any ball (main, echo, Komet) touching any switch flips the flag, if at least `SWITCH_COOLDOWN_S` 0.5 s have passed since the last flip of any kind.
+- **Auto flip:** if `GHOST_FLIP_S` (7 s, both settings) pass without a flip, the flag flips by itself. If every breakable piece left is a phased ghost, the wait is `GHOST_FLIP_PHASED_S` 3 s instead. The clock starts at level start (launch) and restarts at every flip. **Warning:** during the last `GHOST_WARN_S` 1.0 s before an automatic flip, the switch rings and the outlines of the ghosts about to turn solid pulse twice (2 Hz, soft glow through the limiter) and a two-note "tick-tick" plays.
+- **Phased ghost:** no collision with balls; ignored by Nova blasts, Neonpuls waves and Komet; never a target for `aim_point`. It still counts in `breakable_left` (the level needs it broken).
+- **Solid ghost:** a 1-hit brick in every way (combo, note, carrier drop, Nova, Neonpuls, Komet).
+- **Turning solid on top of a ball:** that ghost breaks at once as a normal break (no push-out, no stuck ball).
+- **Finale:** when the finale helper turns on (15.3.3), every ghost left becomes solid for the rest of the level, switches turn dark and behave as chrome (no flip) and the auto-flip clock stops.
+- **Movers:** gliders, march blocks and bosses treat ghosts in either state as obstacles (no overlap ever). A ghost inside a march block moves with the block.
+- **Aim fallback:** when no solid breakable piece is in reach, the assist aims at the nearest switch it can see (already in 4.4 rule 5).
+- **Carriers:** lowercase `a` / `b` are allowed (a ghost carrying a capsule).
+- **Look (graphic-designer):** solid = filled body + outline; phased = outline only at 30% opacity (5.1). Set A has square corner marks, set B round dots (shape cue). Flip = 0.2 s crossfade (logic flips at once). Switch: a ring with a dot, lit while it can flip, dark during the finale.
+
+#### 16.2.2 Saktetid / Tape Slow (power-up, first level 18)
+
+- On catch: for `SAKTETID_S` 10 s every ball's speed is multiplied by `SAKTETID_SCALE` (Lett 0.75, Vanlig 0.65), after the progress ramp, then clamped to `BALL_SPEED_MIN` 300. Gliders, march blocks, bosses and capsules keep their speed.
+- During the last `SAKTETID_RETURN_S` 0.5 s the factor rises linearly back to 1.0.
+- Same power-up again: the timer goes back to 10 s (refresh, no stacking).
+- Countdown with no digits: 5 tape notches on the paddle, one goes dark every 2 s.
+- Music and effects `pitch_scale` 0.9 (Lett) / 0.85 (Vanlig) during the effect, back to 1.0 over the same 0.5 s.
+
+#### 16.2.3 Portal pair `1` / `2` (first level 21)
+
+- Map codes `1` and `2`; each appears exactly 0 or 2 times in a map. The portal centre is the cell centre. Portals never move and are not counted.
+- **Trigger:** a ball whose centre comes within `PORTAL_RADIUS` 40 px of a portal centre, whose own portal cooldown is over and whose `hops < PORTAL_MAX_HOPS` (3), is placed at the partner's centre + unit velocity x `PORTAL_EXIT_PX` 60, clamped inside the walls. Velocity unchanged. That ball's cooldown becomes `PORTAL_COOLDOWN_S` 0.4 s and `hops += 1`.
+- **Hop guard:** `hops` goes back to 0 when the ball touches the paddle or any breakable piece. At 3 hops the ball passes over every portal until then.
+- **No collision:** a portal is a flat ring on the floor; balls never bounce on it, so there is no "portal rim" jitter (this replaces the portal part of 4.4 rule 2).
+- **Line of sight:** for `aim_point`, a circle of radius 40 + 22 around each portal centre blocks the line (the ball would be teleported).
+- Echo and Komet balls use portals. Capsules, Nova blasts and Neonpuls ignore them. Movers treat the portal's cell (92 x 44) as an obstacle.
+- Shape cue: pair 1 = single spiral, pair 2 = spiral with a star in the middle (5.1).
+
+#### 16.2.4 Skjoldnett / Shield Net (power-up, first level 23)
+
+- The kind is resolved when the capsule spawns: in Lett, or on a level whose Vanlig net is unlimited, a Skjoldnett capsule spawns as Bredvinge (it shows the Bredvinge icon).
+- On catch (Vanlig, charged net): if charges < 3, +1 charge (one diamond pip weaves back over 0.4 s; at 0 charges the dashed net becomes solid again). If charges are already 3, it gives Bredvinge instead.
+- Gentle restart refills the net to 3 as before.
+
+#### 16.2.5 Magnet `O` (world 6 element, first level 26)
+
+- A breakable brick with 2 hits. Shape cue: a ring with four chevrons pointing inward; the first hit breaks two chevrons and adds a crack.
+- **Pull:** every frame, for each ball (main, echo, Komet), take the nearest alive magnet whose centre is less than `PULL_RADIUS` 170 px from the ball centre. Turn the ball's direction toward the magnet centre by at most `PULL_TURN_DEG_S` (Lett 45, Vanlig 70) x delta, keep the speed, then apply the 20 degree flat-floor rule. One magnet per ball per frame.
+- Why the ball can never orbit: the tightest turn radius is speed / turn rate = 880 / 1.22 rad/s = 720 px in Vanlig and 570 / 0.79 = 725 px in Lett (my calc), four times the pull radius.
+- Map rule: magnets only in rows r0-r8, so the pull never reaches below y 952 (paddle top is 1402).
+- Nova, Neonpuls and Komet hit it like any 2-hit brick. In a march block it moves with the block.
+- Look: faint field lines rotating at 0.25 rev/s, low contrast, never flashing. "Mindre bevegelse": static field lines.
+
+#### 16.2.6 Two march blocks (level mechanic, first level 27)
+
+- `march` may be one dictionary (as in 15.8) or an array of up to 2 dictionaries, each with `rows`, `floor_y` and an optional `dir` (+1 starts right, -1 starts left; default +1).
+- Each block follows 15.3.7 on its own: own direction, own reversal, own step down. Both use `MARCH_SPEED`.
+- **Obstacle rule** (the builder already does this in NbSim; now part of the design): a block reverses when its next sideways move would overlap any alive piece outside the block (the other block, a switch, a ghost in either state, a glider, a portal cell), and it skips a step down that would overlap one.
+- Map rule: the upper block's `floor_y` must be at or above the lower block's start top edge, so the blocks can never meet when stepping down.
+
+#### 16.2.7 Boss phase actions and the three new bosses
+
+New optional keys in the level's `boss` dictionary:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `on_phase` | Array[String], 2 entries | What happens at the phase 1 and the phase 2 change (15.3.6). Each entry is one action or several joined by `+`, run in this order: `minions`, `nova_ring`, `shield_up`, `jump`. Empty string = nothing extra. `minions: true` (old levels) still means minions at both changes. |
+| `jump` | Array of [row, col] | Anchor cells the boss jumps to, in order, cycling. Each must be free of other pieces in the map. |
+
+- **`nova_ring`:** up to `NOVA_RING_MAX` 6 Nova bricks appear in free cells around the boss's 3 x 2, filled in this order: the row below (columns c-1 to c+3), then the four side cells (c-1 and c+3 in both boss rows), then the row above (c-1 to c+3). "Free" is the minion rule (no piece, ball or capsule in the cell). In a march they join the block at its current offset. 0.3 s fade-in, counted for the clear, and they blast normally (a blast next to the boss deals it 1 damage).
+- **Spawn rule (minions and Nova ring):** a cell directly above a chrome, a switch or a portal cell is not free. Minions in such a pocket made the first L20 draft run 130 s with one brick left (my calc).
+- **`shield_up`:** sets `ghost_a_solid = true` if it is false and restarts the auto-flip clock. Ignored once the finale is on.
+- **`jump`:** the boss fades out over `BOSS_JUMP_FADE_S` 0.3 s (still solid where it is), then moves to the next anchor and fades in over 0.3 s (solid at once). If a ball overlaps the target rect, it waits until the rect is clear, at most `BOSS_JUMP_WAIT_MAX_S` 1.0 s, then moves anyway (the push-out rule in 4.2 handles the ball). A portal swirl plays at both spots. A jumping boss has speed 0.
+
+| Level | Boss | HP Lett / Vanlig | Motion | Phase 1 / phase 2 |
+|---|---|---|---|---|
+| 20 Lastebilen | The truck: sits mid-field (r4-r5) between a roof of bricks and a ghost tailgate (set A, r6) | 12 / 14 | Glides 70 / 110 px/s | `shield_up` / `shield_up` (the tailgate slams shut) |
+| 25 Krystallhjertet | Crystal heart, does not glide | 18 / 24 | Jumps r1 c3 -> r1 c6 -> r1 c1 | `jump` / `jump`, minions at both changes (`minions: true`) |
+| 30 Neonnova | Final boss inside a march block, magnets beside it | 26 / 32 | March r1-r5, floor 800 | `minions` / `minions+nova_ring` |
+
+#### 16.2.8 How the new pieces meet the old ones
+
+| Piece | Komet | Nova blast | Neonpuls | Echo ball | aim_point / finale | Movers |
+|---|---|---|---|---|---|---|
+| Switch | bounces, flips | ignores | ignores | bounces, flips | blocks the line; fallback target | obstacle |
+| Ghost, solid | ploughs through | 1 hit | 1 hit (lowest solid) | breaks it | target | obstacle |
+| Ghost, phased | passes | ignores | skipped | passes | not a target | obstacle |
+| Portal | teleports | ignores | ignores | teleports | blocks the line (r 62) | obstacle (cell) |
+| Magnet | pulled, ploughs through | 1 hit | 1 hit | pulled | target | moves in a march |
+
+### 16.3 Numbers (paste into NbBalance; Lett / Vanlig)
+
+```
+# --- Worlds 4-6 (GDD 16) ---
+const SWITCH_COOLDOWN_S: float = 0.5
+const GHOST_FLIP_S: float = 7.0              # both settings
+const GHOST_FLIP_PHASED_S: float = 3.0       # every brick left is a phased ghost
+const GHOST_WARN_S: float = 1.0
+const GHOST_WARN_PULSES: int = 2
+const GHOST_FADE_S: float = 0.2
+const GHOST_PHASED_ALPHA: float = 0.3
+
+const SAKTETID_S: float = 10.0
+const SAKTETID_SCALE_LETT: float = 0.75
+const SAKTETID_SCALE_VANLIG: float = 0.65
+const SAKTETID_RETURN_S: float = 0.5
+const SAKTETID_PITCH_LETT: float = 0.9
+const SAKTETID_PITCH_VANLIG: float = 0.85
+const SAKTETID_NOTCHES: int = 5
+
+const PORTAL_RADIUS: float = 40.0
+const PORTAL_EXIT_PX: float = 60.0
+const PORTAL_COOLDOWN_S: float = 0.4
+const PORTAL_MAX_HOPS: int = 3
+const PORTAL_LOS_RADIUS: float = 62.0        # PORTAL_RADIUS + BALL_RADIUS
+
+const SKJOLDNETT_MAX_CHARGES: int = 3
+
+const PULL_RADIUS: float = 170.0             # Magnet brick (not the Lett capsule magnet)
+const PULL_TURN_DEG_S_LETT: float = 45.0
+const PULL_TURN_DEG_S_VANLIG: float = 70.0
+const PULL_MAX_ROW: int = 8
+
+const MARCH_BLOCKS_MAX: int = 2
+const NOVA_RING_MAX: int = 6
+const BOSS_JUMP_FADE_S: float = 0.3
+const BOSS_JUMP_WAIT_MAX_S: float = 1.0
+```
+
+Per level (level data, 16.8): speeds Lett 550 / 560 / 570 and Vanlig 830 / 860 / 880 in worlds 4 / 5 / 6; Vanlig paddle 260 / 240 / 240; Vanlig net 3 charges, unlimited on 20, 25 and 30.
+
+### 16.4 Map rules (hand maps and the endless generator)
+
+1. Every breakable cell can be reached from the paddle line (y 1376) by a straight shot or a one-wall bank shot from at least one of x 140 / 340 / 540 / 740 / 940, within 55 degrees of vertical, using the `aim_point` line test (chrome, switches and portal circles block; breakable pieces, ghosts included, never block). In practice: keep at least one empty row between a switch or chrome and the brick above it, and never put a switch right under a wall-column brick.
+2. A portal's 8 neighbour cells hold no chrome, switch or other portal.
+3. Each portal code appears 0 or 2 times.
+4. No piece below r9; magnets only in r0-r8; march `floor_y` at most 1000.
+5. Two march blocks: the upper block's `floor_y` at or above the lower block's start top.
+6. Boss `jump` anchors are free cells in the map.
+
+`python3 tools/action_sim.py` prints `map lint: OK` or the broken rule for every level it runs (rules 1-4 are checked).
+
+### 16.5 Level table, levels 16-30
+
+Sim columns are (my calc): `tools/action_sim.py --skip-old --runs 40`, v3 sim (paddle english on, bot hold rule, near-perfect bot, unlimited net, chain slow-mo not modelled). Real children are slower; treat the times as floors. Python matches the game's own bot test within about 1.5 s on the longest gap for 14 of the 15 built levels, but is optimistic when a boss is the last piece (level 10: Python 8.6 s, game 10.6-12.4 s). So boss levels must come in at 7 s or less here; other levels under 10 s. Restart chance is a guess for the owner's test. Boss counts as 1 in "Breakable".
+
+| # | W | Name | New | Breakable | Other | Carriers (in order) | Bonus pool | Lett / Vanlig speed | Vanlig paddle | Vanlig net | Median Lett / Vanlig | p90 Lett / Vanlig | Breaks/s Vanlig | Longest gap Lett / Vanlig | Last 3 bricks Vanlig | Restart chance Vanlig |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 16 | 4 | Bryteren | Switch + Ghost | 44 | 2 S | komet, ekko | komet, ekko, bredvinge | 550 / 830 | 260 | 3 | 68 / 50 s | 115 / 94 s | 0.93 | 8.1 / 8.0 s | 5.6 s | 10% (guess) |
+| 17 | 4 | Skyggemarsj | Ghost rows in a march block | 38 | 2 S (in the block) | ekko, komet | komet, ekko, bredvinge | 550 / 830 | 260 | 3 | 44 / 38 s | 93 / 63 s | 1.07 | 7.5 / 5.0 s | 4.3 s | 10% (guess) |
+| 18 | 4 | Saktetid | Saktetid | 42 | 2 S | saktetid x2 | komet, ekko, bredvinge | 550 / 830 | 260 | 3 | 80 / 54 s | 110 / 91 s | 0.82 | 11.5 / 7.7 s | 4.0 s | 8% (guess) |
+| 19 | 4 | Filskifte | Ghost checker + gliders | 36 | 2 S | saktetid, ekko | komet, ekko, bredvinge, saktetid | 550 / 830 | 260 | 3 | 63 / 51 s | 110 / 70 s | 0.75 | 11.4 / 9.2 s | 5.8 s | 10% (guess) |
+| 20 | 4 | Lastebilen | Boss behind a ghost tailgate (HP 12 / 14) | 26 + boss | 2 S | ekko, komet | komet, ekko, saktetid | 550 / 830 | 260 | inf | 43 / 32 s | 68 / 56 s | 0.93 | 7.5 / 6.6 s | 4.1 s | 0 |
+| 21 | 5 | Ormehull | Portal pair | 42 | 1 pair | komet, ekko | komet, ekko, saktetid | 560 / 860 | 240 | 3 | 41 / 41 s | 89 / 57 s | 1.12 | 6.5 / 5.4 s | 5.5 s | 10% (guess) |
+| 22 | 5 | Krystallbuer | Two portal pairs + gliders | 32 | 2 pairs | ekko, komet | komet, ekko, bredvinge, saktetid | 560 / 860 | 240 | 3 | 31 / 24 s | 45 / 57 s | 1.49 | 4.9 / 3.2 s | 3.6 s | 12% (guess) |
+| 23 | 5 | Skjoldnett | Skjoldnett | 38 | 1 pair, 2 S | skjoldnett x2 | komet, ekko, skjoldnett, saktetid | 560 / 860 | 240 | 3 | 59 / 39 s | 92 / 73 s | 1.04 | 9.4 / 5.8 s | 6.6 s | 10% (guess) |
+| 24 | 5 | Labyrint | Portals + switches + march | 26 | 1 pair, 2 S | skjoldnett, ekko | komet, ekko, neonpuls, skjoldnett | 560 / 860 | 240 | 3 | 34 / 38 s | 74 / 65 s | 0.75 | 7.0 / 7.8 s | 4.4 s | 12% (guess) |
+| 25 | 5 | Krystallhjertet | Boss that jumps (HP 18 / 24) | 22 + boss | 1 pair | ekko, komet | komet, ekko, neonpuls, skjoldnett | 560 / 860 | 240 | inf | 28 / 30 s | 39 / 58 s | 1.14 | 4.8 / 5.1 s | 12.5 s | 0 |
+| 26 | 6 | Magneten | Magnet | 50 |  | komet, ekko | komet, ekko, neonpuls, saktetid | 570 / 880 | 240 | 3 | 27 / 28 s | 47 / 72 s | 1.98 | 3.7 / 3.5 s | 3.6 s | 12% (guess) |
+| 27 | 6 | Dobbelmarsj | Two march blocks | 34 |  | ekko, neonpuls | komet, ekko, bredvinge, neonpuls | 570 / 880 | 240 | 3 | 24 / 22 s | 33 / 31 s | 1.82 | 3.5 / 2.7 s | 1.8 s | 15% (guess) |
+| 28 | 6 | Stjernestorm | Portals + ghosts + magnets | 42 | 2 pairs, 2 S | komet, skjoldnett | komet, ekko, neonpuls, saktetid, skjoldnett | 570 / 880 | 240 | 3 | 29 / 29 s | 44 / 50 s | 1.64 | 4.6 / 3.7 s | 3.4 s | 15% (guess) |
+| 29 | 6 | Siste port | Everything in one march | 28 | 1 pair, 2 S | ekko, neonpuls | komet, ekko, bredvinge, neonpuls, saktetid, skjoldnett | 570 / 880 | 240 | 3 | 20 / 22 s | 32 / 43 s | 1.50 | 3.7 / 4.0 s | 3.8 s | 15% (guess) |
+| 30 | 6 | Neonnova | Final boss: march, minions, Nova ring (HP 26 / 32) | 28 + boss | 1 pair | neonpuls, ekko | komet, ekko, bredvinge, neonpuls, saktetid | 570 / 880 | 240 | inf | 22 / 30 s | 28 / 56 s | 1.59 | 3.3 / 5.2 s | 14.3 s | 0 |
+
+Pacing checks (my calc, 40 runs per level and setting, output `pacing targets: ALL MET`): every level's Vanlig longest-gap median is under 10 s (worst L19 9.2 s), the boss levels 20, 25 and 30 are at 6.6, 5.1 and 5.2 s, no run of any level 1-30 reaches 300 s (slowest single run 195 s, Lett L2), and the map lint passes on all 15 new maps.
+
+Notes:
+- World 4 is the slowest world in Lett (medians 43-80 s): ghosts take time. It is still inside the 1-2.5 minute session target (8.4). Lett has no gap target; its longest gaps are L18 11.5 s and L19 11.4 s, close to shipped level 3 (12.4 s).
+- World 6 is short and dense (medians 20-30 s, 1.5-2.0 breaks per second in Vanlig): magnets pull the ball into bricks. That is on purpose for the last world (more action, owner).
+- The v3 sim also passes levels 1-15 (Vanlig longest gap 3.4-9.6 s, level 10 with the 16.6 fix 4.9 s).
+
+### 16.6 Level 10 fix (Vanlig gap 12.4 s)
+
+**Cause:** the long gap is the boss fight after every other brick is gone. Nattaxi (HP 20 in Vanlig) glides at 120-187 px/s near the top, and boss hits are not "breaks", so the stretch with no break is the time to land the last 6-10 hits. Paddle english (4.3) widens it from 7.8 s to 11-13 s in the game (builder's note in `tests/levels_test.gd`).
+
+**Fix:** level 10 `boss.hp` from `[14, 20]` to `[14, 16]`. Map, speeds, minions and Lett unchanged. Paddle physics unchanged.
+
+```
+"boss": {"hp": [14, 16], "speed": [80.0, 120.0], "minions": true},
+```
+
+**Verified in the real game loop** (my calc: `tests/levels_test.tscn` with `LEVELS_ONLY=10`, 60 seeds per setting, on a scratch copy of the project with only the level 10 entry changed):
+
+| Level 10 variant (Vanlig) | Median clear | Longest gap median | Last 3 bricks |
+|---|---|---|---|
+| As shipped (HP 20) | 52.4 s | 10.6 s (12.4 s at 20 seeds) | 26.1 s |
+| Map only: chrome posts at r1-r2 c0 and c9 (narrower boss lane) | 49.2 s | 9.1 s | 22.3 s |
+| Chrome posts + HP 16 | 48.2 s | 8.4 s | 21.6 s |
+| **HP 16 (chosen)** | **43.4 s** | **7.1 s** | **20.7 s** |
+
+I chose the HP change over the map-only fix because the chrome posts pass by only 0.9 s and add a wall the owner did not ask for. Builder: remove the `KNOWN_GAP` entry for level 10 in `tests/levels_test.gd` and set `SIM_MEDIAN[10]` to `[46, 40]` (v3 sim).
+
+### 16.7 Maps, levels 16-30 (build these exactly)
+
+Format as in 15.7, plus: `S` switch, `A` / `B` ghost set A / B, `O` magnet, `1` / `2` portal pair 1 / 2, lowercase `a` / `b` / `o` = carriers. These are the exact strings the sim ran.
+
+**Level 16: Bryteren** (carriers: komet, ekko in reading order; bonus pool: komet, ekko, bredvinge)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 ABABABABAB
+r3 BABABABABA
+r4 GGNGGGGNGG
+r5 ..........
+r6 ..S....S..
+r7 ..........
+r8 .g..GG..g.
+```
+Intro to ghosts: a checker of set A (solid) and set B (phased) behind a Glass roof. Hit a switch (r6) or wait 7 s and the checker turns inside out. Novas in r4 open the wall from below.
+
+**Level 17: Skyggemarsj** (carriers: ekko, komet in reading order; bonus pool: komet, ekko, bredvinge; march rows r1-r5, floor_y 1000)
+```
+r0 ..........
+r1 .GGGGGGGG.
+r2 .AAAAAAAA.
+r3 .SBBNNBBS.
+r4 .AAAAAAAA.
+r5 .GgGGGGgG.
+```
+An 8-wide march block whose ghost rows ride along, with the two switches built into the block itself, so they come down toward the paddle.
+
+**Level 18: Saktetid** (carriers: saktetid in reading order; bonus pool: komet, ekko, bredvinge)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GNGABBAGNG
+r3 GGGBAABGGG
+r4 .GGGNNGGG.
+r5 ..........
+r6 ...S..S...
+r7 ..........
+r8 M...gg...M
+```
+Saktetid arrives from the two carriers in r8, between two Gliders. A ghost diamond sits in the middle of a Nova-salted wall; Vanlig is fast now (830), so the slow tape is a real help.
+
+**Level 19: Filskifte** (carriers: saktetid, ekko in reading order; bonus pool: komet, ekko, bredvinge, saktetid)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GNGGDDGGNG
+r3 ABABABABAB
+r4 ..........
+r5 ...S..S...
+r6 ..........
+r7 .M..gg..M.
+r8 ..........
+r9 M........M
+```
+One ghost checker row under a Nova wall, central switches, and two glider lanes (r7, r9) that cross the open field.
+
+**Level 20: Lastebilen** (carriers: ekko, komet in reading order; bonus pool: komet, ekko, saktetid; boss HP 12 / 14, speed 70 / 110, minions no, on_phase ['shield_up', 'shield_up'])
+```
+r0 ..........
+r1 ..GGGGGG..
+r2 .NGBBBBGN.
+r3 ..........
+r4 ...K++....
+r5 ...+++....
+r6 .AAAAAAAA.
+r7 S........S
+r8 ..g.GG.g..
+```
+Lastebilen glides in the middle (r4-r5) under a roof of Glass and B ghosts and over its own ghost tailgate (set A, r6). The switches at the wall ends of r7 drop the tailgate; every phase change slams it shut again (`shield_up`). Top corners are empty on purpose: corner bricks behind a gliding boss made 20-30 s gaps (my calc).
+
+**Level 21: Ormehull** (carriers: komet, ekko in reading order; bonus pool: komet, ekko, saktetid)
+```
+r0 ........1.
+r1 GGGGGGGGGG
+r2 GGNGGGGNGG
+r3 DGGGDDGGGD
+r4 GGGGGGGGGG
+r5 ..........
+r6 ..........
+r7 .1......g.
+r8 ..g.......
+```
+Portal intro: the low portal (r7 c1) sends a rising ball out of the top portal (r0 c8) behind the wall, so it rattles down through the bricks from above.
+
+**Level 22: Krystallbuer** (carriers: ekko, komet in reading order; bonus pool: komet, ekko, bredvinge, saktetid)
+```
+r0 1........2
+r1 .GGGGGGGG.
+r2 .GNGTTGNG.
+r3 .GGGGGGGG.
+r4 ..........
+r5 M...MM...M
+r6 ..........
+r7 ..2....1..
+r8 .g.M..M.g.
+```
+Two pairs that swap sides (left low to right high and back) and six Gliders in r5 and r8.
+
+**Level 23: Skjoldnett** (carriers: skjoldnett in reading order; bonus pool: komet, ekko, skjoldnett, saktetid)
+```
+r0 .........1
+r1 .GGGGGGGG.
+r2 GDGGNNGGDG
+r3 GGAABBAAGG
+r4 .GGGGGGGG.
+r5 ..........
+r6 1..S..S...
+r7 ..........
+r8 ..g....g..
+```
+Skjoldnett from the carriers in r8 (Vanlig: +1 net charge; Lett: Bredvinge). One portal low on the left wall (r6 c0) leads behind the wall at the top right; a small ghost band in r3.
+
+**Level 24: Labyrint** (carriers: skjoldnett, ekko in reading order; bonus pool: komet, ekko, neonpuls, skjoldnett; march rows r1-r4, floor_y 700)
+```
+r0 ..........
+r1 ..GAAAAG..
+r2 ..NBBBBN..
+r3 ..GAAAAG..
+r4 ..TGGGGT..
+r5 ..........
+r6 ..........
+r7 1.S....S.1
+r8 ..........
+r9 ...g..g...
+```
+A 6-wide march block of ghosts that stops stepping at y 700, above a portal pair at both walls (r7) that throws the ball across the field.
+
+**Level 25: Krystallhjertet** (carriers: ekko, komet in reading order; bonus pool: komet, ekko, neonpuls, skjoldnett; boss HP 18 / 24, speed 0 / 0, minions yes, on_phase ['jump', 'jump'], jump [[1, 6], [1, 1]])
+```
+r0 ..........
+r1 ...K++....
+r2 ...+++....
+r3 ..........
+r4 GGDGGGGDGG
+r5 GNGGTTGGNG
+r6 ..........
+r7 .1......1.
+r8 ..g....g..
+```
+Krystallhjertet does not glide: at each phase change it jumps (r1 c3 -> r1 c6 -> r1 c1) and drops minions under its new spot. The portal pair in r7 swaps the ball across.
+
+**Level 26: Magneten** (carriers: komet, ekko in reading order; bonus pool: komet, ekko, neonpuls, saktetid)
+```
+r0 ..........
+r1 GGGGGGGGGG
+r2 GGGOGGOGGG
+r3 GNGGGGGGNG
+r4 GGGGOOGGGG
+r5 .GGGGGGGG.
+r6 ..........
+r7 ..g....g..
+```
+Magnet intro: four magnets inside a 50-brick wall pull the ball into the bricks. About 2 breaks per second, the busiest non-boss level in the game.
+
+**Level 27: Dobbelmarsj** (carriers: ekko, neonpuls in reading order; bonus pool: komet, ekko, bredvinge, neonpuls; march rows r1-r2, floor_y 600, dir 1; march rows r5-r7, floor_y 1000, dir -1)
+```
+r0 ..........
+r1 .GGNGGNGG.
+r2 .GOGGGGOG.
+r3 ..........
+r4 ..........
+r5 ..TGGGGT..
+r6 ..GNggNG..
+r7 ..GGGGGG..
+```
+Two march blocks moving in opposite directions: the upper one (r1-r2, magnets inside) starts right and stops stepping at y 600, the lower one (r5-r7) starts left and steps to y 1000.
+
+**Level 28: Stjernestorm** (carriers: komet, skjoldnett in reading order; bonus pool: komet, ekko, neonpuls, saktetid, skjoldnett)
+```
+r0 1........2
+r1 GGGGGGGGGG
+r2 GAAOGGOBBG
+r3 GBBGNNGAAG
+r4 .GGGGGGGG.
+r5 ..........
+r6 ...S..S...
+r7 .2......1.
+r8 .g.M..M.g.
+```
+Remix: two portal pairs (each top corner leads to the low cell on the opposite side), ghost pairs and two magnets in the wall, central switches, two Gliders.
+
+**Level 29: Siste port** (carriers: ekko, neonpuls in reading order; bonus pool: komet, ekko, bredvinge, neonpuls, saktetid, skjoldnett; march rows r1-r4, floor_y 760)
+```
+r0 ..........
+r1 ..GAAAAG..
+r2 ..NBOOBN..
+r3 ..GAAAAG..
+r4 ..DGGGGD..
+r5 ..........
+r6 ..........
+r7 ..........
+r8 1.S....S.1
+r9 .gM....Mg.
+```
+Everything at once: a march block with ghosts and two magnets, a portal pair and two switches under it, Gliders in r9.
+
+**Level 30: Neonnova** (carriers: neonpuls, ekko in reading order; bonus pool: komet, ekko, bredvinge, neonpuls, saktetid; boss HP 26 / 32, speed 0 / 0, minions no, on_phase ['minions', 'minions+nova_ring']; march rows r1-r5, floor_y 800)
+```
+r0 ..........
+r1 ...K++....
+r2 .O.+++..O.
+r3 .GNGGGGNG.
+r4 .GGTGGTGG.
+r5 .DGGGGGGD.
+r6 ..........
+r7 1..g..g..1
+```
+Neonnova rides in a march block (r1-r5, floor 800) between two magnets. Phase 1: 4 Glass minions. Phase 2: minions and a ring of up to 6 Novas around it, so the last third of the fight is chain blasts. The wall portals (r7) swap the ball across.
+
+### 16.8 Level data format additions
+
+| Key | Type | Example | Notes |
+|---|---|---|---|
+| `march` | Dictionary or Array[Dictionary] | `[{"rows": [1, 2], "floor_y": 600, "dir": 1}, {"rows": [5, 7], "floor_y": 1000, "dir": -1}]` | Old single dictionary still valid; `dir` optional (default 1) |
+| `boss.on_phase` | Array[String] | `["minions", "minions+nova_ring"]` | 16.2.7 |
+| `boss.jump` | Array[Array[int]] | `[[1, 6], [1, 1]]` | Anchor [row, col] cells, cycled |
+| `carriers`, `bonus_pool` | Array[String] | | New kinds: `saktetid`, `skjoldnett` |
+
+World names for the map pages: 4 Nattveien, 5 Krystallgrotta, 6 Stjerneporten (6.2). Colour ramps for worlds 4-6 belong to graphic-designer; until they exist, keep rotating the world 1 ramp (15.8).
+
+### 16.9 Endless generator "Neonveien" v3 (replaces 6.5)
+
+Shown as the last page of the world map; available when `full_unlock` is true and world 1 is cleared (open question 3 still stands). Endless level k = 1, 2, 3 ... is deterministic.
+
+1. `seed = hash("neon_bricks_endless_" + str(k))`; one RNG from that seed for every roll below, in this order. `d = min(1.0, (k - 1) / 30.0)`.
+2. **Allowed elements:** world 1 elements always; any other element only if the level that introduced it (5.1 and 16.2: Triple 6, Glider 7, Bredvinge 8, Chrome 9, March 11, Neonpuls 13, Switch + Ghost 16, Saktetid 18, Portal 21, Skjoldnett 23, Magnet 26, two march blocks 27) is in the save's `cleared` list.
+3. **Rows:** `n = 4 + round(4 * d)` rows from r2 down; the lowest brick row is never below r9.
+4. **Template** for the left half (columns 0-4): full block, checker, stripes, diamond, pyramid or frame. Remove 10% of filled cells at random, then mirror to columns 5-9.
+5. **Brick type** per filled cell, rolled in this order: Chrome `0.05 + 0.10d` (never in the lowest used row); Magnet `0.04` if allowed (max 4, never in the lowest used row); Triple `0.10d`; Double `0.20 + 0.15d`; Nova `0.08` (max 6); else Glass. Mirrored cells copy the left cell's type.
+6. **Level mechanic,** one roll `u` in [0, 1), first match wins:
+   - Boss: every 10th k (k % 10 == 0). Uses the L15 setup: boss `K` anchored at r0 c3 (rows r0-r1, the formation starts at r2), boss and formation form one march block, `floor_y` 800; steps 7 and 8 are skipped with HP `20 + k/5` (Vanlig) or `12 + k/10` (Lett), max 40, `on_phase ["minions", "minions"]`; if L30 is cleared and k % 20 == 0, `["minions", "minions+nova_ring"]` instead.
+   - Two march blocks: `u < 0.15`, if allowed and the formation is at most 8 columns wide. Upper half of the used rows = block 1 (`dir` +1, `floor_y` = start top of block 2), lower half = block 2 (`dir` -1, `floor_y` 1000).
+   - One march block: `u < 0.40`, if allowed and the formation is at most 8 columns wide (`floor_y` 1000).
+   - Gliders: `u < 0.60`, if allowed: the lowest used row becomes gliders.
+   - Otherwise none.
+7. **Switch + ghosts:** if allowed, 30% of levels (separate roll): the 2nd and 3rd used rows become a checker, `A` where (row + col) is even and `B` where it is odd (keeps the mirror). Two switches at (lowest used row + 2, c3) and (lowest used row + 2, c6). Skip if that row is past r11.
+8. **Portals:** if allowed, 25% of levels (separate roll): pair 1 at (r0, c1) and (lowest used row + 2, c8). Skip if that row is past r11 or rule 16.4.2 fails.
+9. **Carriers:** `2 + floor(2d)` breakable cells in the lower half of the formation, each with a random allowed power-up (`skjoldnett` follows 16.2.4). `bonus_pool` = all allowed power-ups.
+10. **Validity:** breakable count 20-48; chrome at most 20% of filled cells; the map rules in 16.4 (1-6) pass. If not, reroll with seed + 1, up to 20 tries, then fall back to the "pyramid" template with Glass only.
+11. **Speeds and net:** Lett 570; Vanlig `880 + 10 * floor(k / 5)`, max 960. Paddle Lett 400, Vanlig 240. Vanlig net 3 charges; every 5th k is a breather (`d` halved, net unlimited), so every boss level (k % 10 == 0) also has an unlimited net.
+12. Save the highest endless k reached; the page offers "continue from k" and "start at 1" as two icons.
+
+### 16.10 Feel additions
+
+| Event | Visual | Sound | Haptic (if on) | Mindre bevegelse |
+|---|---|---|---|---|
+| Switch hit (flip) | Switch ring pops 1.0 -> 1.15 -> 1.0 in 120 ms; ghosts crossfade 0.2 s | Two-tone "click-clack" | 15 ms | No pop; crossfade kept |
+| Auto-flip warning | Switch rings and the ghosts about to turn solid pulse twice in 1.0 s (limiter) | "tick-tick" | none | Same (2 Hz, slow) |
+| Ghost breaks as it turns solid | Normal break | Normal note | none | same |
+| Saktetid on | Ball trail turns into a tape ribbon; 5 notches on the paddle | Music and effects pitch down over 0.3 s | 15 ms | No ribbon wobble |
+| Saktetid ends | Notches gone | Pitch winds back up over 0.5 s | none | same |
+| Portal in / out | 12-particle swirl at both portals, 0.3 s; the trail is cut, no line across the field | Falling "whoop" in, rising "whoop" out | none | No swirl |
+| Skjoldnett catch | One pip weaves back on the net, 0.4 s | Rising "zing" | 15 ms | Pip appears at once |
+| Magnet pull | Field lines brighten slightly while a ball is inside the radius (steady, no flashing) | Soft hum that rises with nearness | none | Static lines |
+| Second march block | Its bricks lean the other way | Tick-tock a fifth higher than block 1 | none | No lean |
+| Boss jump | Boss fades out 0.3 s, portal swirl at both spots, fades in 0.3 s | Deep "vwoom" | 20 ms | Cut, no fade |
+| Nova ring | Novas fade in around the boss (0.3 s) | Ring of rising pings | 20 ms | No fade |
+| Truck tailgate (`shield_up`) | Ghost row slams solid with a 4 px drop-in | Heavy "clank" | 25 ms | No drop-in |
+
+### 16.11 Builder scope (godot-android-dev) and acceptance
+
+Ship in this order; every step leaves a playable build.
+
+1. **Level 10 fix** (16.6) and the test update (remove `KNOWN_GAP[10]`, `SIM_MEDIAN[10] = [46, 40]`).
+2. **World 4:** Switch + Ghost (16.2.1, flip timer, warning, finale rule), Saktetid, boss `on_phase` with `shield_up`, levels 16-20, world 4 map page.
+3. **World 5:** portals with the hop guard, Skjoldnett, boss `jump`, levels 21-25, world 5 map page.
+4. **World 6:** Magnet, two march blocks, `nova_ring` and the spawn rule, levels 26-30, world 6 map page, then the endless page (16.9).
+
+Placeholders allowed until graphic-designer follows up: switch = chrome brick with a ring decal; ghosts = brick mesh with outline shader and alpha; portal = flat torus; magnet = brick with a ring decal; world 4-6 backgrounds = world 1 scene with a tint.
+
+**Acceptance for game-qa** (headless where possible; same bot as `tests/levels_test.gd`):
+- Every level 1-30, 20 seeds per setting, real nets: no run reaches 300 s; Vanlig longest-gap median under 10 s.
+- Sim parity for 16-30: NbSim bot medians within +-35% of the Vanlig medians in 16.5.
+- Ghosts: a phased ghost never stops a ball (log check on L16); at 3 bricks left (Lett 4) no ghost is phased (log check on L16-20, 23, 24, 28, 29).
+- Portals: no ball uses portals more than 3 times between two paddle or brick touches (log check on L22 and L28).
+- Magnet: no ball circles a magnet (the ball's direction never turns more than 120 degrees inside one magnet's radius; log check on L26).
+- March: no march piece bottom ever below its block's `floor_y`, and the two L27 blocks never overlap (log check).
+- Flash limiter: at most 3 glow spikes in any 1 s window during an auto-flip warning plus a Nova chain (L18) and the L30 phase 2 change.
+- Lett: no game over, unlimited net, no shake on all 30 levels.
+
+### 16.12 Open questions for the owner
+
+9. **World 6 element:** I picked the Magnet (bends the ball toward itself, 2 hits). Keep it, or would you rather have the Splitter or nothing new?
+10. **Ghosts flip on their own every 7 s** (with a 1 s warning), so a child is never stuck waiting for a lucky switch hit. OK, or should only the switches flip them?
+11. **World 6 is short:** its levels clear in 20-30 s (medians, dense and very busy) against 28-80 s in Lett and 24-54 s in Vanlig in worlds 4-5. Keep it short and loud, or add more bricks?
+12. **Level 10 boss** now has 16 HP in Vanlig (was 20). Fine, or do you want the tougher fight and a map change instead?
