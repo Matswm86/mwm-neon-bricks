@@ -410,6 +410,29 @@ func _test_endless() -> void:
 		var tag: String = "all 30 cleared" if cleared == all30 else "world 1 only"
 		print("info  endless (%s) element counts over k 1-40: %s" % [tag, mech])
 		_check(bad.is_empty(), "endless (%s): 40 valid maps %s" % [tag, bad])
+	# March in endless (GDD 16.9 rule 6, QA 2026-10-07 finding 3): non-boss
+	# levels k 1-200 with everything cleared.
+	var marches: int = 0
+	var twos: int = 0
+	var eligible: int = 0
+	for k: int in range(1, 201):
+		if k % 10 == 0:
+			continue
+		eligible += 1
+		var mv: Variant = NbEndless.generate(k, all30).get("march", {})
+		if mv is Array:
+			twos += 1
+			marches += 1
+		elif not (mv as Dictionary).is_empty():
+			marches += 1
+	var rate: float = float(marches) / float(eligible)
+	_check(
+		rate >= 0.15 and twos > 0,
+		(
+			"endless march on %d of %d non-boss levels (%.0f%%, %d with two blocks), k 1-200"
+			% [marches, eligible, rate * 100.0, twos]
+		)
+	)
 	# Bot clears (Vanlig, all cleared, real nets), cap 300 s.
 	var times: PackedStringArray = PackedStringArray()
 	var ok: bool = true

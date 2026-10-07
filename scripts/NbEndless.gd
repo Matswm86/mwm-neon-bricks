@@ -133,8 +133,15 @@ static func _build(k: int, cleared: Array, rng: RandomNumberGenerator, force: St
 	}
 	# Level mechanic (rule 6), one roll.
 	var u_m: float = rng.randf()
-	var width: int = _width(grid)
-	var march_ok: bool = allowed("march", cleared) and width <= 8 and force == ""
+	# GDD 16.9 rule 6 (changed 2026-10-07): the mirrored templates are 10
+	# columns wide, so a march roll trims the formation to the central 8
+	# columns (c1-c8, still mirrored) and the "at most 8 wide" rule can pass.
+	var march_ok: bool = allowed("march", cleared) and force == "" and not boss
+	var two_ok: bool = march_ok and allowed("march2", cleared) and u_m < 0.15 and n >= 2
+	if march_ok and u_m < 0.40 and _width(grid) > 8:
+		for r: int in range(top, low + 1):
+			grid[r][0] = "."
+			grid[r][9] = "."
 	if boss:
 		for r: int in 2:
 			for c: int in 3:
@@ -152,7 +159,7 @@ static func _build(k: int, cleared: Array, rng: RandomNumberGenerator, force: St
 			"model": BOSS_MODELS[(k / 10 - 1) % BOSS_MODELS.size()],
 		}
 		lv["march"] = {"rows": [0, low], "floor_y": 800.0}
-	elif march_ok and allowed("march2", cleared) and u_m < 0.15 and n >= 2:
+	elif two_ok:
 		var split: int = top + n / 2 - 1
 		var lower_top: float = NbBalance.GRID_Y + NbBalance.CELL_H * float(split + 1) + 4.0
 		lv["march"] = [

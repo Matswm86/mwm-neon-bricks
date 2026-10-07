@@ -1296,6 +1296,7 @@ Shown as the last page of the world map; available when `full_unlock` is true an
 5. **Brick type** per filled cell, rolled in this order: Chrome `0.05 + 0.10d` (never in the lowest used row); Magnet `0.04` if allowed (max 4, never in the lowest used row); Triple `0.10d`; Double `0.20 + 0.15d`; Nova `0.08` (max 6); else Glass. Mirrored cells copy the left cell's type.
 6. **Level mechanic,** one roll `u` in [0, 1), first match wins:
    - Boss: every 10th k (k % 10 == 0). Uses the L15 setup: boss `K` anchored at r0 c3 (rows r0-r1, the formation starts at r2), boss and formation form one march block, `floor_y` 800; steps 7 and 8 are skipped with HP `20 + k/5` (Vanlig) or `12 + k/10` (Lett), max 40, `on_phase ["minions", "minions"]`; if L30 is cleared and k % 20 == 0, `["minions", "minions+nova_ring"]` instead.
+   - (Builder change 2026-10-07, QA_FULL finding 3: every template mirrors to columns 0-9, so the 8-column rule below never passed and endless never marched. A march roll now first clears columns c0 and c9 of the formation, keeping the mirror, and the rule then holds.)
    - Two march blocks: `u < 0.15`, if allowed and the formation is at most 8 columns wide. Upper half of the used rows = block 1 (`dir` +1, `floor_y` = start top of block 2), lower half = block 2 (`dir` -1, `floor_y` 1000).
    - One march block: `u < 0.40`, if allowed and the formation is at most 8 columns wide (`floor_y` 1000).
    - Gliders: `u < 0.60`, if allowed: the lowest used row becomes gliders.

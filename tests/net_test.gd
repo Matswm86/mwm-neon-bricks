@@ -255,6 +255,7 @@ func _test_save_roundtrip() -> void:
 	st.full_unlock = false
 	_check(st.visible_levels() == ([1, 2, 3] as Array[int]), "full_unlock false shows levels 1-3")
 	_check(st.next_level_after(3) == 0, "no next level after 3 when locked")
+	_check(not st.endless_available(), "no endless page when locked")
 	st.full_unlock = true
 	_check(
 		st.visible_levels().size() == NbLevels.count(),
