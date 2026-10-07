@@ -4,8 +4,9 @@ extends Node
 ##   godot --headless --audio-driver Dummy res://tests/net_test.tscn
 ## 1. 3-charge net + gentle restart on a world 1 level (test-only flag).
 ## 2. Unlimited world 1 net in Vanlig never restarts.
-## 3. A bot paddle clears all 5 levels in Lett and Vanlig; the ball never
-##    travels flatter than 20 degrees; level 4 never goes 15 s without progress.
+## 3. A bot paddle clears the 5 world 1 levels in Lett and Vanlig; the ball
+##    never travels flatter than 20 degrees; level 4 never goes 15 s without
+##    progress. (All 15 levels: tests/levels_test.tscn.)
 ## 4. Komet capsules are caught and plough through bricks; the flash limiter
 ##    keeps glow spikes to 3 per second.
 ## Exit code 0 = all pass.
@@ -61,7 +62,7 @@ func _test_charged_net() -> void:
 		sim.step(DT)
 		t += DT
 		if restarted.is_empty():
-			broken_before = 14 - sim.breakable_left
+			broken_before = sim.start_breakable - sim.breakable_left
 	_check(
 		charges_seen == [2, 1, 0], "catches spend pips 3 -> 2 -> 1 -> 0 (seen %s)" % [charges_seen]
 	)
@@ -82,7 +83,10 @@ func _test_charged_net() -> void:
 			% [restored[0] if restored.size() > 0 else -1, broken_before]
 		)
 	)
-	_check(sim.breakable_left == 14, "all 14 bricks are back (%d)" % sim.breakable_left)
+	_check(
+		sim.breakable_left == sim.start_breakable,
+		"all %d bricks are back (%d)" % [sim.start_breakable, sim.breakable_left]
+	)
 	_check(sim.net_charges == 3, "net refilled to 3 pips (%d)" % sim.net_charges)
 	_check(sim.state == NbSim.State.REST and sim.ball_visible, "ball rests on the paddle")
 	_check(absf(sim.ball_pos.x - sim.paddle_x) < 0.01, "ball sits on paddle centre")
@@ -121,7 +125,7 @@ func _test_unlimited_net() -> void:
 func _test_bot_clears() -> void:
 	var min_flat: float = sin(deg_to_rad(NbBalance.MIN_FLAT_DEG)) - 0.001
 	for easy: bool in [true, false]:
-		for id: int in range(1, NbLevels.count() + 1):
+		for id: int in range(1, NbLevels.LEVELS_PER_WORLD + 1):
 			var sim := NbSim.new()
 			sim.rng.seed = 100 + id
 			sim.setup(NbLevels.get_level(id), easy)
@@ -179,7 +183,7 @@ func _test_bot_clears() -> void:
 						% [tag, worst_gap]
 					)
 				)
-			if String(NbLevels.get_level(id)["carrier_powerup"]) == "komet":
+			if NbLevels.carriers(NbLevels.get_level(id)).has("komet"):
 				if easy:
 					# Lett has the capsule magnet; Vanlig misses are allowed.
 					_check(caught[0] >= 1, "%s Komet capsules caught: %d" % [tag, caught[0]])
@@ -247,7 +251,7 @@ func _test_save_roundtrip() -> void:
 	_check(st.visible_levels() == ([1, 2, 3] as Array[int]), "full_unlock false shows levels 1-3")
 	_check(st.next_level_after(3) == 0, "no next level after 3 when locked")
 	st.full_unlock = true
-	_check(st.visible_levels().size() == 5, "full_unlock true shows all 5 slice levels")
+	_check(st.visible_levels().size() == 15, "full_unlock true shows all 15 levels")
 	st.cleared = [] as Array[int]
 	st.easy = keep_easy
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(NbState.SAVE_PATH))

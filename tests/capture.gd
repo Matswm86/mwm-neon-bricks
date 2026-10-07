@@ -12,6 +12,9 @@ extends Node
 ##   shell           - inside MWM Play: Engine meta set, set_full_unlock(false),
 ##                     levels 1-3 only, level 3 card has no "next" and emits
 ##                     free_levels_finished; own home disc and gear hidden
+##   action          - action pass (GDD 15): Neonrush combo, Ekko echoes, boss
+##                     levels 5 / 10 / 15 mid-fight, world 2 and 3 levels,
+##                     the three map pages
 
 var out_dir: String = OS.get_environment("CAPTURE_DIR")
 var main: NbMain
@@ -36,6 +39,8 @@ func _ready() -> void:
 			await _phase_tall()
 		"shell":
 			await _phase_shell()
+		"action":
+			await _phase_action()
 		_:
 			await _phase_shots()
 	print("CAPTURE DONE in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
@@ -260,6 +265,99 @@ func _phase_shell() -> void:
 		)
 	)
 	Engine.remove_meta(&"mwm_play_shell")
+
+
+## Runs a level on autopilot at 3x until `until` is true (or max_s game
+## seconds), then takes a shot at normal speed.
+func _play_until(
+	id: int, easy: bool, until: Callable, max_s: float, shot: String, after_s: float = 0.0
+) -> void:
+	NeonBricks.easy = easy
+	main.open_level(id)
+	var play: NbPlay = main.play
+	play.autopilot = true
+	Engine.time_scale = 3.0
+	while not until.call() and play.sim.time < max_s and not play.card_visible():
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	if after_s > 0.0:
+		await _wait_s(after_s)
+	await _frames(2)
+	await _shot(shot)
+	var s: NbSim = play.sim
+	print(
+		(
+			"%s: L%d t=%.1f combo=%d left=%d/%d balls=%d boss_phase=%d capsules=%d finale=%s"
+			% [
+				shot,
+				id,
+				s.time,
+				s.combo,
+				s.breakable_left,
+				s.total_breakable,
+				s.balls.size(),
+				s.boss_phase,
+				s.capsules.size(),
+				s.finale_on
+			]
+		)
+	)
+
+
+func _phase_action() -> void:
+	var play: NbPlay = main.play
+	await _wait_s(1.0)
+	# Combo moment: Vanlig level 12 (Nova chains in a march block).
+	await _play_until(12, false, func() -> bool: return play.sim.combo >= 10, 60.0, "20_combo_rush")
+	# Ekko: Lett level 4, echo balls in play.
+	await _play_until(4, true, func() -> bool: return play.sim.balls.size() >= 3, 90.0, "21_ekko")
+	# Boss levels mid-fight.
+	await _play_until(
+		5,
+		true,
+		func() -> bool: return play.sim.boss_phase >= 1 and play.sim.combo >= 3,
+		90.0,
+		"22_boss_l5",
+		1.0
+	)
+	await _play_until(
+		10, false, func() -> bool: return play.sim.boss_phase >= 1, 90.0, "23_boss_l10_minions", 1.0
+	)
+	await _play_until(
+		15, false, func() -> bool: return play.sim.boss_phase >= 1, 90.0, "24_boss_l15_march", 1.0
+	)
+	# Worlds 2 and 3 placeholders.
+	await _play_until(
+		7,
+		false,
+		func() -> bool: return play.sim.breakable_left <= play.sim.start_breakable - 8,
+		60.0,
+		"25_world2_l7_gliders"
+	)
+	await _play_until(
+		13,
+		false,
+		func() -> bool: return play.sim.pulse_left > 0 or play.sim.time > 25.0,
+		60.0,
+		"26_world3_l13_neonpuls"
+	)
+	# Map: all three world pages.
+	main.open_map()
+	main.map.show_page(1)
+	await _wait_s(1.2)
+	await _shot("27_map_world1")
+	main.map.show_page(2)
+	await _wait_s(0.6)
+	await _shot("28_map_world2")
+	main.map.show_page(3)
+	await _wait_s(0.6)
+	await _shot("29_map_world3")
+	var ids: Array[int] = []
+	for id: int in range(1, NbLevels.count() + 1):
+		main.map.show_page(NbLevels.world_of(id))
+		if main.map.disc_for(id) != null:
+			ids.append(id)
+	print("map levels reachable over the pages: %s" % [ids])
 
 
 func _touch(pos: Vector2, pressed: bool) -> void:
