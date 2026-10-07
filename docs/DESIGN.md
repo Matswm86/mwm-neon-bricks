@@ -316,11 +316,11 @@ If a level or the Godot capture shows a higher value, dim the emission of that v
 | # | World | At a glance | Signature where there is no glass | Behind the glass |
 |---|---|---|---|---|
 | 1 | Neonstranda | Pink-orange sunset | Stars in the sky band | Neon sliced sun (fixed, 13.1), grid sea, ridges, palms |
-| 2 | Rutenettbyen | Electric-blue night city | Full moon with two cloud bands, top right (x 710-910, y 50-250) | Low skyline, three depth layers with amber window dots, four vertical neon strips (pink/blue) |
+| 2 | Rutenettbyen | Electric-blue night city | Full moon with two cloud bands, upper middle (x 535-735, y 50-250; moved left of the gear 2026-10-07) | Low skyline, three depth layers with amber window dots, four vertical neon strips (pink/blue) |
 | 3 | Arkadehallen | Gold arcade hall | Ceiling truss with a row of 14 gold bulbs (x 250-1080, y 150-215); gold checker floor lines | Square gold pixel stars, a CRT screen at the horizon with pixel hills and a pixel sun, cabinet rows on both sides |
 | 4 | Nattveien | Red highway at night | Overpass deck crossing the band with 14 amber lamps (y 130-215) | Road to the horizon with amber lane dashes, red edge lines, red tail-light and warm head-light streaks, lamp posts, red mountain line |
 | 5 | Krystallgrotta | Mint-and-violet cave | Rock ceiling with 10 short stalactites, mint tips | Faceted violet crystal heart at the horizon, crystal clusters, floor mist, violet lattice floor |
-| 6 | Stjerneporten | Violet space gate with gold | Nebula and a gold-lit planet top right (x 800-960, y 60-200) | Ring gate (violet segments, 24 gold beads) around the field, gate light glow, nebula, gold grid bridge |
+| 6 | Stjerneporten | Violet space gate with gold | Nebula and a gold-lit planet upper right (x 660-810, y 60-200; moved left of the gear 2026-10-07) | Ring gate (violet segments, 24 gold beads) around the field, gate light glow, nebula, gold grid bridge |
 
 ### 11.2 Sky gradient (sky.gdshader uniforms, `source_color`)
 
@@ -346,7 +346,7 @@ Motif colours are what the player sees **through the glass**; the shader outputs
 | World | motif | c (t) | r (t) | window | top | mid | low | rim |
 |---|---|---|---|---|---|---|---|---|
 | 1 | 1 sliced sun | (0.0, 0.012) | 0.222 | on | `#D2402E` Color(0.824, 0.251, 0.180) | `#D4326C` Color(0.831, 0.196, 0.424) | `#A42CC4` Color(0.643, 0.173, 0.769) | `#F27088` Color(0.949, 0.439, 0.533) |
-| 2 | 2 moon + cloud bands | (0.2, 0.86) | 0.075 | off | `#E4ECFF` Color(0.894, 0.925, 1.000) | `#B4C6FF` Color(0.706, 0.776, 1.000) | `#8FA6F0` Color(0.561, 0.651, 0.941) | `#FFFFFF` Color(1.000, 1.000, 1.000) |
+| 2 | 2 moon + cloud bands | (0.07, 0.86) | 0.075 | off | `#E4ECFF` Color(0.894, 0.925, 1.000) | `#B4C6FF` Color(0.706, 0.776, 1.000) | `#8FA6F0` Color(0.561, 0.651, 0.941) | `#FFFFFF` Color(1.000, 1.000, 1.000) |
 | 3 | 3 CRT screen | (0.0, 0.1) | 0.075 | on | `#B4400E` Color(0.706, 0.251, 0.055) | `#8A1F66` Color(0.541, 0.122, 0.400) | `#12082A` Color(0.071, 0.031, 0.165) | `#B89A3A` Color(0.722, 0.604, 0.227) |
 | 4 | 0 none | - | - | off | - | - | - | - |
 | 5 | 5 hex crystal | (0.0, 0.1) | 0.13 | on | `#6A44E0` Color(0.416, 0.267, 0.878) | `#4A2CB0` Color(0.290, 0.173, 0.690) | `#2A1A80` Color(0.165, 0.102, 0.502) | `#20A060` Color(0.125, 0.627, 0.376) |
@@ -429,7 +429,7 @@ All props are unshaded or lit opaque meshes, shadows off, no alpha blend. Every 
 
 **World 6 Stjerneporten**
 - `RingGate`: `prop_ring_gate.glb` (R 40 m, 24 segments, 24 beads), facing the camera, at (0, 27.6, -120): its inner opening frames the field (t radius about 0.30). Segments albedo `#2A1A5A`, metallic 0.7, roughness 0.25, emission `#5A2CB0` energy 0.9; beads unshaded `#FFD27A` x 1.6. It rotates 0.02 rev/min around z (barely visible, parallax only; static under "Mindre bevegelse"). The lower part passes through the floor plane; that is intended.
-- `Planet`: sphere r 23 m at (104, 367, -400), albedo `#3A1C6A`, emission `#120828` 0.5, plus a gold terminator: a second sphere r 23.2 m offset (-5, +3, -6) unshaded `#FFD27A` x 1.6 drawn behind it (reads as a lit crescent). Outside the home square.
+- `Planet`: sphere r 23 m at (60, 367, -400) (was 104: the stand-alone gear at x 870-1040 covered it, QA 2026-10-07), albedo `#3A1C6A`, emission `#120828` 0.5, plus a gold terminator: a second sphere r 23.2 m offset (-5, +3, -6) unshaded `#FFD27A` x 1.6 drawn behind it (reads as a lit crescent). Outside the home square.
 - Nebula and gate light: sky shader.
 
 ### 11.7 Four questions (worlds 2-6 vista features)

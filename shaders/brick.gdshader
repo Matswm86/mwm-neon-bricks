@@ -31,6 +31,7 @@ uniform vec3 switch_body : source_color = vec3(0.227, 0.251, 0.322);
 uniform vec3 switch_btn : source_color = vec3(0.102, 0.110, 0.149);
 uniform vec3 switch_off : source_color = vec3(0.290, 0.310, 0.376);
 uniform float less_motion = 0.0;
+uniform vec3 key_col : source_color = vec3(0.102, 0.024, 0.078);
 
 varying vec3 lp;
 varying vec3 ln;
@@ -228,7 +229,9 @@ void fragment() {
 			// Magnet: ring + four inward chevrons; first hit breaks two.
 			float r = length(p);
 			float ring = fill(abs(r - 0.075) - 0.016, aa);
+			float ring_k = fill(abs(r - 0.075) - 0.034, aa);
 			float ch = 0.0;
+			float ch_k = 0.0;
 			vec2 dirs[4] = { vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0) };
 			float rad[4] = { 0.20, 0.20, 0.145, 0.145 };
 			for (int i = 0; i < 4; i++) {
@@ -242,7 +245,13 @@ void fragment() {
 				float c1 = sd_segment(p, tip, back + nn * 0.04);
 				float c2 = sd_segment(p, tip, back - nn * 0.04);
 				ch = max(ch, fill(min(c1, c2) - 0.013, aa));
+				ch_k = max(ch_k, fill(min(c1, c2) - 0.032, aa));
 			}
+			// Dark keyline under the marks, as on the ghosts (DESIGN 12.2), so
+			// they read on the pale sun-yellow row (QA 2026-10-07 finding 4).
+			float key = max(ring_k, ch_k) * front;
+			alb = mix(alb, key_col, key);
+			emi = mix(emi, vec3(0.0), key);
 			// Field lines: six faint spokes turning 0.25 rev/s (static
 			// under "Mindre bevegelse"), low contrast, never flashing.
 			float spin = TIME * 1.5708 * (1.0 - less_motion);

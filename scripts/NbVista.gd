@@ -440,7 +440,8 @@ func _build_w5(g: Node3D) -> void:
 
 
 ## World 6 Stjerneporten: the ring gate framing the field and a planet with
-## a gold-lit crescent (nebula and gate light are in the sky shader).
+## a gold-lit crescent (nebula and gate light are in the sky shader). The
+## planet sits at x 60 (not DESIGN's first 104) so the gear never covers it.
 func _build_w6(g: Node3D) -> void:
 	var body := lit(Color(0.165, 0.102, 0.353), 0.7, 0.25)
 	body.emission_enabled = true
@@ -469,7 +470,7 @@ func _build_w6(g: Node3D) -> void:
 	var p := MeshInstance3D.new()
 	p.mesh = planet
 	p.material_override = pm
-	p.position = Vector3(104.0, 367.0, -400.0)
+	p.position = Vector3(60.0, 367.0, -400.0)
 	g.add_child(p)
 	var lit_s := SphereMesh.new()
 	lit_s.radius = 23.2
@@ -479,5 +480,5 @@ func _build_w6(g: Node3D) -> void:
 	var t := MeshInstance3D.new()
 	t.mesh = lit_s
 	t.material_override = unshaded(GOLD, 1.6)
-	t.position = Vector3(99.0, 370.0, -406.0)
+	t.position = Vector3(55.0, 370.0, -406.0)
 	g.add_child(t)

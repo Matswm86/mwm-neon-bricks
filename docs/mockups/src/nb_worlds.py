@@ -28,7 +28,7 @@ WORLDS = {
         "name": "Rutenettbyen",
         "sky": {"top": "#040A22", "mid": "#0B1C48", "low": "#1D3C7A", "horizon": "#3A6FD0"},
         "stars": {"col": "#DCE6FF", "gain": 0.35, "square": 0, "density": 0.985},
-        "motif": {"kind": 2, "c": (0.20, 0.86), "r": 0.075, "window": False,
+        "motif": {"kind": 2, "c": (0.07, 0.86), "r": 0.075, "window": False,
                   # full moon in the sky band (no glass, no luminance cap)
                   "top": "#E4ECFF", "mid": "#B4C6FF", "low": "#8FA6F0", "rim": "#FFFFFF"},
         "ridge": None,

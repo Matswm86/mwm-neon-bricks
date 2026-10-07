@@ -440,11 +440,16 @@ func _build_gameplay() -> void:
 			n.visible = false
 			holder.add_child(n)
 			kinds[k] = n
+			if k != "ekko":
+				_add_back_icon(n)
 		_capsule_kinds.append(kinds)
 		_capsule_kind.append("")
 		# Ekko has no GLB yet: the Komet pill with three rings over its icon.
 		var ek: Node3D = _ekko_rings()
 		(kinds["ekko"] as Node3D).add_child(ek)
+		var ek_back: Node3D = _ekko_rings()
+		ek_back.rotation_degrees = Vector3(180.0, 0.0, 0.0)
+		(kinds["ekko"] as Node3D).add_child(ek_back)
 		_hide_komet_icon(kinds["ekko"])
 	# Saktetid: 5 tape notches on the paddle face, one goes dark every 2 s.
 	_paddle_notches = MultiMeshInstance3D.new()
@@ -497,6 +502,29 @@ func _ekko_rings() -> Node3D:
 		t.position = Vector3(pos.x, pos.y, 0.165)
 		ekko.add_child(t)
 	return ekko
+
+
+## The capsules spin about their long axis, so the icon goes on the back
+## too (QA 2026-10-07: half of every spin showed a blank pill). Only the
+## icon surfaces are copied, turned 180 deg about x (upright when the back
+## faces the camera).
+func _add_back_icon(n: Node3D) -> void:
+	var mi: MeshInstance3D = _find_mesh(n)
+	if mi == null:
+		return
+	var am := ArrayMesh.new()
+	for sfi: int in mi.mesh.get_surface_count():
+		var m: Material = mi.mesh.surface_get_material(sfi)
+		if m and m.resource_name in ["capsule_icon", "capsule_tail"]:
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mi.mesh.surface_get_arrays(sfi))
+			am.surface_set_material(am.get_surface_count() - 1, m)
+	if am.get_surface_count() == 0:
+		return
+	var back := MeshInstance3D.new()
+	back.mesh = am
+	back.transform = mi.transform * Transform3D(Basis(Vector3.RIGHT, PI), Vector3.ZERO)
+	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.get_parent().add_child(back)
 
 
 func _hide_komet_icon(n: Node3D) -> void:
@@ -555,6 +583,9 @@ func _build_fx() -> void:
 		pmat.scale_max = 1.3
 		pmat.particle_flag_rotate_y = false
 		p.process_material = pmat
+		# Idle pooled emitters stay hidden: a visible one costs a draw call
+		# even when it is not emitting (QA 2026-10-07 finding 2).
+		p.visible = false
 		add_child(p)
 		_shards.append(p)
 	for i: int in 4:
@@ -612,6 +643,7 @@ func show_gameplay(on: bool) -> void:
 			c.visible = false
 		for p: GPUParticles3D in _shards:
 			p.emitting = false
+			p.visible = false
 		for e: MeshInstance3D in _echo_nodes:
 			e.visible = false
 		for e: MeshInstance3D in _echo_halos:
@@ -625,11 +657,18 @@ func set_world(w: int) -> void:
 	world_id = clampi(w, 1, NbWorldLook.LOOKS.size())
 	var look: Dictionary = NbWorldLook.get_look(world_id)
 	vista.set_world(world_id)
+	# Map pages too: tubes take the world colour at once, no Neonrush left
+	# over from the last level (QA 2026-10-07 finding 6).
+	_combo = 0
+	_rush = 0.0
 	_sky_psm.sky_top_color = look["psm_top"]
 	_sky_psm.sky_horizon_color = look["psm_horizon"]
 	_sky_psm.ground_horizon_color = (look["psm_horizon"] as Color) * 0.65
 	_tube_base = look["tube"]
 	_tube_gain = float(look.get("tube_gain", 2.2))
+	for i: int in _tube_mat.size():
+		_tube_glow[i] = 0.0
+		_tube_mat[i].albedo_color = _tube_base * _tube_gain
 	_rail_mat.albedo_color = look["rail"]
 	_key.light_color = look["key"]
 	_key.light_energy = float(look["key_energy"])
@@ -1055,6 +1094,9 @@ func _set_capsule_kind(i: int, kind: String) -> void:
 
 
 func _sync_fx(dt: float) -> void:
+	for sp: GPUParticles3D in _shards:
+		if sp.visible and not sp.emitting:
+			sp.visible = false
 	_pulse_t += dt
 	if _pulse_t < NbBalance.PULSE_FX_S:
 		var k: float = _pulse_t / NbBalance.PULSE_FX_S
@@ -1186,6 +1228,7 @@ func fx_burst(pos: Vector2, color: Color, shards: int, glow_spike: bool) -> void
 		pm.color = Color(color.r * 2.2, color.g * 2.2, color.b * 2.2)
 		p.amount_ratio = float(shards) / float(NbBalance.SHARDS_RUSH)
 		p.global_position = at
+		p.visible = true
 		p.restart()
 		p.emitting = true
 	if glow_spike:

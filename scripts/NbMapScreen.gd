@@ -123,7 +123,8 @@ func refresh() -> void:
 		_pages += 1
 	page = clampi(page, 1, _pages)
 	var endless: bool = page == _endless_page
-	_cont.visible = endless
+	# "Continue" only once there is something to continue (QA 2026-10-07 #13).
+	_cont.visible = endless and st.endless_best >= 2
 	_start.visible = endless
 	arrow_left.visible = _pages > 1 and page > 1
 	arrow_right.visible = _pages > 1 and page < _pages

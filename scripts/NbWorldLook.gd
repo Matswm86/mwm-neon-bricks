@@ -67,7 +67,7 @@ const LOOKS: Array[Dictionary] = [
 			"sky_low": Color(0.114, 0.235, 0.478),
 			"horizon": Color(0.227, 0.435, 0.816),
 			"motif": 2,
-			"motif_c": Vector2(0.2, 0.86),
+			"motif_c": Vector2(0.07, 0.86),
 			"motif_r": 0.075,
 			"motif_top": Color(0.894, 0.925, 1.000),
 			"motif_mid": Color(0.706, 0.776, 1.000),
