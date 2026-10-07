@@ -6,7 +6,7 @@ extends Node
 ## 2. Unlimited world 1 net in Vanlig never restarts.
 ## 3. A bot paddle clears the 5 world 1 levels in Lett and Vanlig; the ball
 ##    never travels flatter than 20 degrees; level 4 never goes 15 s without
-##    progress. (All 15 levels: tests/levels_test.tscn.)
+##    progress. (All 30 levels: tests/levels_test.tscn.)
 ## 4. Komet capsules are caught and plough through bricks; the flash limiter
 ##    keeps glow spikes to 3 per second.
 ## Exit code 0 = all pass.
@@ -26,6 +26,8 @@ func _ready() -> void:
 	_test_save_roundtrip()
 	_check(finished == 5, "all 5 test groups ran to the end (%d)" % finished)
 	print("RESULT: %s (%d failure(s))" % ["PASS" if fails == 0 else "FAIL", fails])
+	NbMeshes.clear_cache()
+	NbEndless.clear_cache()
 	get_tree().quit(0 if fails == 0 else 1)
 
 
@@ -101,6 +103,7 @@ func _test_charged_net() -> void:
 		sim.restart_count == 2 and charges_seen == [2, 1, 0, 2, 1, 0],
 		"second round: 3 catches then restart again"
 	)
+	sim.disconnect_all()
 	finished += 1
 
 
@@ -191,6 +194,7 @@ func _test_bot_clears() -> void:
 					print(
 						"info  %s Komet capsules caught by a ball-only bot: %d" % [tag, caught[0]]
 					)
+			sim.disconnect_all()
 	finished += 1
 
 
@@ -229,6 +233,7 @@ func _test_flash_limiter() -> void:
 		)
 	)
 	_check(lim.denied > 0, "limiter actually held back bursts during the Komet run")
+	sim.disconnect_all()
 	finished += 1
 
 
@@ -251,7 +256,10 @@ func _test_save_roundtrip() -> void:
 	_check(st.visible_levels() == ([1, 2, 3] as Array[int]), "full_unlock false shows levels 1-3")
 	_check(st.next_level_after(3) == 0, "no next level after 3 when locked")
 	st.full_unlock = true
-	_check(st.visible_levels().size() == 15, "full_unlock true shows all 15 levels")
+	_check(
+		st.visible_levels().size() == NbLevels.count(),
+		"full_unlock true shows all %d levels" % NbLevels.count()
+	)
 	st.cleared = [] as Array[int]
 	st.easy = keep_easy
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(NbState.SAVE_PATH))

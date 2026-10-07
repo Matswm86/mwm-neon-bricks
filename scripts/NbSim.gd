@@ -1,11 +1,12 @@
 class_name NbSim
 extends RefCounted
 
-## Pure game logic of one level in logic px (GDD sections 4, 5 and 15):
+## Pure game logic of one level in logic px (GDD sections 4, 5, 15 and 16):
 ## paddle, up to 3 balls (main + Ekko echoes), bricks incl. Triple, Nova,
-## Glider, mini-boss and the march block, capsules (Komet, Ekko, Bredvinge,
-## Neonpuls), the combo meter, net, anti-stuck rules, line-of-sight aim
-## (assist + finale) and the gentle restart. No nodes, no rendering: NbPlay
+## Glider, Switch + Ghost, Magnet, portal pairs, mini-bosses with phase
+## actions and up to two march blocks, capsules (Komet, Ekko, Bredvinge,
+## Neonpuls, Saktetid, Skjoldnett), the combo meter, net, anti-stuck rules,
+## line-of-sight aim (assist + finale) and the gentle restart. No nodes, no rendering: NbPlay
 ## drives it, NbWorld draws it, and tests run it headless.
 
 signal launched
@@ -35,12 +36,44 @@ signal boss_hit(index: int, pos: Vector2)
 signal boss_phase_changed(index: int, phase: int)
 signal boss_defeated(index: int, pos: Vector2)
 signal minions_added(indices: PackedInt32Array)
-signal march_stepped(dir: int)
+signal march_stepped(block: int)
 signal finale_started
 signal pulse_fired(x_lo: float, x_hi: float)
 signal wide_changed(active: bool)
+# Worlds 4-6 (GDD 16)
+signal ghosts_flipped(a_solid: bool, auto: bool)
+signal ghost_warned(a_solid_next: bool)
+signal switch_hit(index: int)
+signal portal_used(ball: int, from: Vector2, to: Vector2)
+signal slow_changed(active: bool)
+signal shield_added(charges: int)
+signal boss_jump_started(index: int, from: Vector2, to: Vector2)
+signal boss_jump_landed(index: int)
+signal nova_ring_added(indices: PackedInt32Array)
 
 enum State { REST, PLAY, RESTART, CLEAR }
+
+## Spawn cells around a boss, [row, col] from its anchor cell (GDD 15.3.6 /
+## 16.2.7): minions in the row under it, the Nova ring below, beside, above.
+const MINION_CELLS: Array[Vector2i] = [
+	Vector2i(2, -1), Vector2i(2, 0), Vector2i(2, 1), Vector2i(2, 2), Vector2i(2, 3)
+]
+const NOVA_RING_CELLS: Array[Vector2i] = [
+	Vector2i(2, -1),
+	Vector2i(2, 0),
+	Vector2i(2, 1),
+	Vector2i(2, 2),
+	Vector2i(2, 3),
+	Vector2i(0, -1),
+	Vector2i(0, 3),
+	Vector2i(1, -1),
+	Vector2i(1, 3),
+	Vector2i(-1, -1),
+	Vector2i(-1, 0),
+	Vector2i(-1, 1),
+	Vector2i(-1, 2),
+	Vector2i(-1, 3),
+]
 
 
 class Brick:
@@ -63,6 +96,10 @@ class Brick:
 	var minion: bool = false
 	var born_t: float = -99.0
 	var color: Color = Color(1, 1, 1)
+	## 0 = not a ghost, 1 = set A, 2 = set B.
+	var ghost: int = 0
+	## March block index (-1 = none).
+	var block: int = -1
 
 	func breakable() -> bool:
 		return max_hp > 0
@@ -76,6 +113,31 @@ class Ball:
 	var vel: Vector2 = Vector2.ZERO
 	var echo: bool = false
 	var life: float = 0.0
+	## Portal cooldown and hops since the last paddle or breakable touch.
+	var pcd: float = 0.0
+	var hops: int = 0
+	## Turn the magnet pull has applied since the ball entered the radius of
+	## the current magnet (test log: GDD 16.11 "no ball circles a magnet").
+	var pull_acc: float = 0.0
+	var pull_of: Brick = null
+
+
+## Portal (GDD 16.2.3): a flat ring on the floor, never a collider.
+class Portal:
+	var pair: int = 1
+	var pos: Vector2 = Vector2.ZERO
+	## The cell rect: movers treat it as an obstacle.
+	var cell: Rect2 = Rect2()
+	var partner: int = -1
+
+
+## One march block (GDD 15.3.7 / 16.2.6).
+class MarchBlock:
+	var dir: int = 1
+	var start_dir: int = 1
+	var off: Vector2 = Vector2.ZERO
+	var floor_y: float = NbBalance.MARCH_FLOOR_MAX_Y
+	var drop_left: float = 0.0
 
 
 class Capsule:
@@ -128,9 +190,21 @@ var finale_on: bool = false
 var boss_index: int = -1
 var boss_phase: int = 0
 var march_on: bool = false
-var march_dir: int = 1
-var march_off: Vector2 = Vector2.ZERO
+var blocks: Array[MarchBlock] = []
+## Lowest floor_y of all blocks (tests and the old single-block API).
 var march_floor: float = NbBalance.MARCH_FLOOR_MAX_Y
+var portals: Array[Portal] = []
+var has_ghosts: bool = false
+## GDD 16.2.1: set A solid when true, set B when false.
+var ghost_a_solid: bool = true
+## Finale reached: every ghost left stays solid, switches go dark.
+var ghosts_locked: bool = false
+var flips: int = 0
+var slow_t: float = 0.0
+## 0..1 visibility of a jumping boss (renderer fades it, GDD 16.2.7).
+var boss_jump_state: int = 0
+## Largest magnet-pull turn of one pass through a magnet radius (degrees).
+var max_pull_turn_deg: float = 0.0
 ## Brick the last aim_point() call picked (-1 = none).
 var aim_index: int = -1
 
@@ -154,6 +228,7 @@ var _carriers: Array[String] = []
 var _bonus: Array[String] = []
 var _bonus_i: int = 0
 var _minion_color: Color = Color(1, 1, 1)
+var _ring_color: Color = Color(1, 1, 1)
 var _rest_t: float = 0.0
 var _last_break_t: float = 0.0
 var _next_dry_t: float = 0.0
@@ -169,12 +244,30 @@ var _novas: Array = []
 var _pulse_next_t: float = 0.0
 var _home_target: Vector2 = Vector2.INF
 var _home_retarget_t: float = 0.0
-var _march_drop_left: float = 0.0
 var _promote: bool = false
+var _block_rows: Array[Vector2i] = []
+var _has_magnets: bool = false
+var _flip_t: float = 0.0
+var _flip_clock_on: bool = false
+var _warned: bool = false
+var _jump_i: int = 0
+var _jump_t: float = 0.0
+var _jump_pending: int = 0
+var _jump_to: Rect2 = Rect2()
+var _land_t: float = -99.0
 
 
 func _init() -> void:
 	balls.append(Ball.new())
+
+
+## Drops every connection to this sim's signals. Callers whose lambdas
+## capture the sim (tests, bots) call it when done, so the closure cycle
+## does not keep the sim alive (QA 2026-10-06 finding 8).
+func disconnect_all() -> void:
+	for sg: Dictionary in get_signal_list():
+		for c: Dictionary in get_signal_connection_list(sg["name"]):
+			(c["signal"] as Signal).disconnect(c["callable"])
 
 
 ## Builds the level. force_charged_net is the test-only flag (GDD 12): the
@@ -204,17 +297,17 @@ func setup(lv: Dictionary, is_easy: bool, force_charged_net: bool = false) -> vo
 
 func _build_bricks() -> void:
 	bricks.clear()
+	portals.clear()
 	breakable_left = 0
 	boss_index = -1
+	has_ghosts = false
 	var rows: Array = level["rows"]
 	var world: int = int(level.get("world", 1))
 	var colors: Dictionary = NbLevels.row_colors(rows, world)
 	var ramp: Array = NbLevels.RAMPS[clampi(world - 1, 0, NbLevels.RAMPS.size() - 1)]
 	_minion_color = ramp[1]
-	var march: Dictionary = level.get("march", {})
-	march_on = not march.is_empty()
-	var m_rows: Array = march.get("rows", [-1, -1])
-	march_floor = minf(float(march.get("floor_y", 1000.0)), NbBalance.MARCH_FLOOR_MAX_Y)
+	_ring_color = ramp[0]
+	_build_blocks()
 	var boss_cfg: Dictionary = level.get("boss", {})
 	var pick: int = 0 if easy else 1
 	var ci: int = 0
@@ -223,6 +316,9 @@ func _build_bricks() -> void:
 		for c: int in mini(s.length(), NbBalance.GRID_COLS):
 			var ch: String = s[c]
 			if ch == "." or ch == "+":
+				continue
+			if ch == "1" or ch == "2":
+				_add_portal(int(ch), r, c)
 				continue
 			var b := Brick.new()
 			b.row = r
@@ -234,12 +330,16 @@ func _build_bricks() -> void:
 				ci += 1
 			var size := Vector2(NbBalance.BRICK_W, NbBalance.BRICK_H)
 			match b.code:
-				"D":
+				"D", "O":
 					b.max_hp = 2
 				"T":
 					b.max_hp = 3
-				"C":
+				"C", "S":
 					b.max_hp = -1
+				"A", "B":
+					b.max_hp = 1
+					b.ghost = 1 if b.code == "A" else 2
+					has_ghosts = true
 				"K":
 					b.boss = true
 					b.max_hp = int(boss_cfg.get("hp", [10, 14])[pick])
@@ -254,7 +354,8 @@ func _build_bricks() -> void:
 			b.hp = b.max_hp
 			b.rect = Rect2(_cell_origin(r, c), size)
 			b.home = b.rect
-			if march_on and r >= int(m_rows[0]) and r <= int(m_rows[1]):
+			b.block = _block_of_row(r)
+			if b.block >= 0:
 				b.march = true
 				b.home_vx = 0.0
 			b.vx = b.home_vx
@@ -262,8 +363,54 @@ func _build_bricks() -> void:
 			bricks.append(b)
 			if b.breakable():
 				breakable_left += 1
+	for i: int in portals.size():
+		for j: int in portals.size():
+			if i != j and portals[i].pair == portals[j].pair:
+				portals[i].partner = j
 	start_breakable = breakable_left
 	total_breakable = breakable_left
+	_has_magnets = false
+	for b: Brick in bricks:
+		_has_magnets = _has_magnets or b.code == "O"
+
+
+## `march` is one dictionary (GDD 15.8) or an array of up to two (16.2.6).
+func _build_blocks() -> void:
+	blocks.clear()
+	_block_rows.clear()
+	var m: Variant = level.get("march", {})
+	var list: Array = []
+	if m is Dictionary:
+		if not (m as Dictionary).is_empty():
+			list.append(m)
+	elif m is Array:
+		list = m
+	march_floor = NbBalance.MARCH_FLOOR_MAX_Y
+	for d: Dictionary in list.slice(0, NbBalance.MARCH_BLOCKS_MAX):
+		var blk := MarchBlock.new()
+		blk.floor_y = minf(float(d.get("floor_y", 1000.0)), NbBalance.MARCH_FLOOR_MAX_Y)
+		blk.start_dir = 1 if int(d.get("dir", 1)) >= 0 else -1
+		blk.dir = blk.start_dir
+		var rr: Array = d.get("rows", [-1, -1])
+		_block_rows.append(Vector2i(int(rr[0]), int(rr[1])))
+		blocks.append(blk)
+		march_floor = minf(march_floor, blk.floor_y)
+	march_on = not blocks.is_empty()
+
+
+func _block_of_row(r: int) -> int:
+	for k: int in _block_rows.size():
+		if r >= _block_rows[k].x and r <= _block_rows[k].y:
+			return k
+	return -1
+
+
+func _add_portal(pair: int, r: int, c: int) -> void:
+	var p := Portal.new()
+	p.pair = pair
+	p.cell = Rect2(_cell_origin(r, c), Vector2(NbBalance.BRICK_W, NbBalance.BRICK_H))
+	p.pos = p.cell.get_center()
+	portals.append(p)
 
 
 func _cell_origin(r: int, c: int) -> Vector2:
@@ -286,14 +433,55 @@ func _reset_round() -> void:
 	finale_on = false
 	boss_phase = 0
 	_bonus_i = 0
-	march_dir = 1
-	march_off = Vector2.ZERO
-	_march_drop_left = 0.0
+	for blk: MarchBlock in blocks:
+		blk.dir = blk.start_dir
+		blk.off = Vector2.ZERO
+		blk.drop_left = 0.0
 	_home_target = Vector2.INF
 	_promote = false
 	while balls.size() > 1:
 		balls.pop_back()
 	balls[0].echo = false
+	balls[0].pcd = 0.0
+	balls[0].hops = 0
+	ghost_a_solid = true
+	ghosts_locked = false
+	_flip_clock_on = false
+	_warned = false
+	if slow_t > 0.0:
+		slow_t = 0.0
+		slow_changed.emit(false)
+	boss_jump_state = 0
+	_jump_i = 0
+	_jump_pending = 0
+	_land_t = -99.0
+
+
+## GDD 16.2.1: a ghost is solid when its set is the solid one, or for good
+## once the finale has locked them.
+func solid(b: Brick) -> bool:
+	if not b.alive:
+		return false
+	if b.ghost == 0 or ghosts_locked:
+		return true
+	return (b.ghost == 1) == ghost_a_solid
+
+
+## Seconds of the auto-flip clock left (INF when it does not run).
+func flip_left() -> float:
+	if not _flip_clock_on or ghosts_locked or not has_ghosts:
+		return INF
+	return _flip_t + _flip_wait() - time
+
+
+## 0..1 visibility of the boss while it jumps (1 = fully shown).
+func boss_visibility() -> float:
+	match boss_jump_state:
+		1:
+			return clampf(1.0 - _jump_t / NbBalance.BOSS_JUMP_FADE_S, 0.0, 1.0)
+		2:
+			return 0.0
+	return clampf((time - _land_t) / NbBalance.BOSS_JUMP_FADE_S, 0.0, 1.0)
 
 
 func paddle_top() -> float:
@@ -310,7 +498,20 @@ func ramp() -> float:
 
 
 func speed() -> float:
-	return clampf(base_speed * ramp(), NbBalance.BALL_SPEED_MIN, NbBalance.BALL_SPEED_MAX)
+	var sp: float = minf(base_speed * ramp(), NbBalance.BALL_SPEED_MAX)
+	sp *= slow_factor()
+	return clampf(sp, NbBalance.BALL_SPEED_MIN, NbBalance.BALL_SPEED_MAX)
+
+
+## Saktetid (GDD 16.2.2): x0.65 (Lett 0.75) for 10 s, the last 0.5 s
+## rising linearly back to 1.
+func slow_factor() -> float:
+	if slow_t <= 0.0:
+		return 1.0
+	var sc: float = NbBalance.saktetid_scale(easy)
+	if slow_t >= NbBalance.SAKTETID_RETURN_S:
+		return sc
+	return lerpf(1.0, sc, slow_t / NbBalance.SAKTETID_RETURN_S)
 
 
 func net_active() -> bool:
@@ -364,6 +565,10 @@ func launch() -> void:
 	_last_break_t = time
 	_next_dry_t = time + NbBalance.DRY_SPELL_S
 	_loop_records.clear()
+	if has_ghosts and not _flip_clock_on:
+		_flip_clock_on = true
+		_flip_t = time
+		_warned = false
 	launched.emit()
 
 
@@ -390,6 +595,9 @@ func step(delta: float) -> void:
 				_finale_home(delta)
 				_anti_stuck()
 				_komet_tick(delta)
+				_tick_ghosts()
+				_tick_slow(delta)
+				_tick_jump(delta)
 		State.RESTART:
 			_restart_tick(delta)
 	if state != State.RESTART:
@@ -435,19 +643,21 @@ func _move_balls(delta: float, with_main: bool) -> void:
 		if bl.vel.length() < 0.001:
 			bl.vel = Vector2(0.3, -1.0)
 		bl.vel = bl.vel.normalized() * sp
+		bl.pcd -= delta
 		for i: int in steps:
-			_substep(bl, dt)
+			_substep(bl, dt, bi)
 			if state == State.RESTART:
 				return
 			if bl.echo and bl.life <= 0.0:
 				break
+		_magnet_pull(bl, delta)
 		_flat_floor(bl)
 	if _promote:
 		_promote = false
 		_promote_echo()
 
 
-func _substep(bl: Ball, dt: float) -> void:
+func _substep(bl: Ball, dt: float, bi: int) -> void:
 	var r: float = NbBalance.BALL_RADIUS
 	var chrome: bool = false
 	# X axis
@@ -483,8 +693,64 @@ func _substep(bl: Ball, dt: float) -> void:
 		if not bl.echo:
 			_record_loop()
 	_push_out(bl)
+	_portal_check(bl, bi)
 	_paddle_contact(bl)
 	_net_and_loss(bl)
+
+
+## GDD 16.2.3: a ball centre within 40 px of a portal leaves its partner
+## 60 px along its velocity; 0.4 s cooldown, at most 3 hops between two
+## paddle or breakable touches.
+func _portal_check(bl: Ball, bi: int) -> void:
+	if portals.is_empty() or bl.pcd > 0.0 or bl.hops >= NbBalance.PORTAL_MAX_HOPS:
+		return
+	var r2: float = NbBalance.PORTAL_RADIUS * NbBalance.PORTAL_RADIUS
+	for p: Portal in portals:
+		if p.partner < 0 or bl.pos.distance_squared_to(p.pos) >= r2:
+			continue
+		var q: Portal = portals[p.partner]
+		var from: Vector2 = bl.pos
+		var d: Vector2 = bl.vel.normalized() if bl.vel.length() > 0.001 else Vector2.UP
+		var r: float = NbBalance.BALL_RADIUS
+		bl.pos = q.pos + d * NbBalance.PORTAL_EXIT_PX
+		bl.pos.x = clampf(bl.pos.x, NbBalance.FIELD_LEFT + r, NbBalance.FIELD_RIGHT - r)
+		bl.pos.y = maxf(bl.pos.y, NbBalance.FIELD_TOP + r)
+		bl.pcd = NbBalance.PORTAL_COOLDOWN_S
+		bl.hops += 1
+		portal_used.emit(bi, from, bl.pos)
+		return
+
+
+## GDD 16.2.5 magnet: the nearest alive magnet within 170 px turns the ball
+## toward its centre by at most 70 (Lett 45) deg/s; speed is kept.
+func _magnet_pull(bl: Ball, delta: float) -> void:
+	if not _has_magnets:
+		return
+	var best: Brick = null
+	var bd: float = NbBalance.PULL_RADIUS * NbBalance.PULL_RADIUS
+	for b: Brick in bricks:
+		if b.code != "O" or not b.alive:
+			continue
+		var d2: float = bl.pos.distance_squared_to(b.center())
+		if d2 > 1.0 and d2 < bd:
+			bd = d2
+			best = b
+	if best == null:
+		bl.pull_acc = 0.0
+		bl.pull_of = null
+		return
+	if best != bl.pull_of:
+		bl.pull_of = best
+		bl.pull_acc = 0.0
+	var to: Vector2 = best.center() - bl.pos
+	var want: float = atan2(to.x, -to.y)
+	var cur: float = atan2(bl.vel.x, -bl.vel.y)
+	var turn: float = deg_to_rad(NbBalance.pull_turn_deg_s(easy)) * delta
+	var da: float = clampf(wrapf(want - cur, -PI, PI), -turn, turn)
+	var a: float = cur + da
+	bl.vel = Vector2(sin(a), -cos(a)) * bl.vel.length()
+	bl.pull_acc += absf(rad_to_deg(da))
+	max_pull_turn_deg = maxf(max_pull_turn_deg, bl.pull_acc)
 
 
 ## Every alive brick the ball overlaps takes one hit. Returns bit 1 when the
@@ -497,13 +763,16 @@ func _hit_bricks(bl: Ball) -> int:
 	var n: int = bricks.size()
 	for i: int in n:
 		var b: Brick = bricks[i]
-		if not b.alive or not _overlaps(bl.pos, b.rect):
+		if not b.alive or not _overlaps(bl.pos, b.rect) or not solid(b):
 			continue
 		if not b.breakable():
 			out |= 3
 			chrome_hit.emit(i, bl.pos)
+			if b.code == "S":
+				_switch_touched(i)
 			continue
 		any = true
+		bl.hops = 0
 		if komet_active() and not bl.echo:
 			komet_left -= 1
 			if b.boss:
@@ -588,7 +857,7 @@ func _break(i: int, chained: bool) -> void:
 ## flip that velocity component.
 func _push_out(bl: Ball) -> void:
 	for b: Brick in bricks:
-		if not b.alive or not _overlaps(bl.pos, b.rect):
+		if not b.alive or not _overlaps(bl.pos, b.rect) or not solid(b):
 			continue
 		if b.breakable() and not b.boss and komet_active() and not bl.echo:
 			continue
@@ -645,6 +914,7 @@ func _paddle_contact(bl: Ball) -> void:
 	if not aimed:
 		_paddle_angle(bl, rel, max_deg, sp)
 	bl.pos.y = top - NbBalance.PADDLE_CONTACT_ABOVE - NbBalance.BALL_RADIUS
+	bl.hops = 0
 	if not bl.echo:
 		_loop_records.clear()
 		_progress()
@@ -831,7 +1101,7 @@ func _nova_blast(at: Vector2) -> void:
 	var n: int = bricks.size()
 	for j: int in n:
 		var b: Brick = bricks[j]
-		if b.alive and b.breakable() and b.rect.intersects(blast):
+		if b.breakable() and solid(b) and b.rect.intersects(blast):
 			_damage(j, 1, true)
 			if state != State.PLAY:
 				return
@@ -860,7 +1130,7 @@ func _pulse_wave() -> void:
 		var best_y: float = -INF
 		for j: int in bricks.size():
 			var b: Brick = bricks[j]
-			if not b.alive or not b.breakable():
+			if not b.breakable() or not solid(b):
 				continue
 			if b.rect.position.x < cx1 and b.rect.end.x > cx0 and b.rect.end.y > best_y:
 				best_y = b.rect.end.y
@@ -884,6 +1154,8 @@ func _boss_phase_check(i: int) -> void:
 		want = 1
 	if b.hp <= floori(b.max_hp / 3.0):
 		want = 2
+	var cfg: Dictionary = level.get("boss", {})
+	var acts_all: Array = cfg.get("on_phase", ["", ""])
 	while boss_phase < want:
 		boss_phase += 1
 		b.vx *= NbBalance.BOSS_PHASE_SPEEDUP
@@ -891,53 +1163,91 @@ func _boss_phase_check(i: int) -> void:
 		if not _bonus.is_empty():
 			if _spawn_capsule(at, _bonus[_bonus_i % _bonus.size()], true) != null:
 				_bonus_i += 1
-		if bool(level.get("boss", {}).get("minions", false)):
-			_spawn_minions(i)
+		var act: String = String(acts_all[boss_phase - 1]) if boss_phase <= acts_all.size() else ""
+		var acts: PackedStringArray = act.split("+", false)
+		if bool(cfg.get("minions", false)) and not acts.has("minions"):
+			acts.append("minions")
+		# Fixed order (GDD 16.2.7): minions, nova_ring, shield_up, jump.
+		if acts.has("minions"):
+			var added: PackedInt32Array = _spawn_cells(
+				i, MINION_CELLS, "G", NbBalance.BOSS_MINIONS_MAX
+			)
+			if not added.is_empty():
+				minions_added.emit(added)
+		if acts.has("nova_ring"):
+			var ring: PackedInt32Array = _spawn_cells(
+				i, NOVA_RING_CELLS, "N", NbBalance.NOVA_RING_MAX
+			)
+			if not ring.is_empty():
+				nova_ring_added.emit(ring)
+		if acts.has("shield_up") and not ghosts_locked and has_ghosts:
+			_set_ghosts(true, false)
+		if acts.has("jump"):
+			_start_jump(i)
 		boss_phase_changed.emit(i, boss_phase)
+	_update_finale()
 
 
-## Up to 4 Glass minions in the empty cells of the grid row under the boss,
-## columns (boss column - 1) to (boss column + 3); in a march level they join
-## the block at its current offset (GDD 15.3.6).
-func _spawn_minions(bi: int) -> void:
+## Spawns pieces of `code` in free cells around the boss (offsets [row,
+## col] from its anchor cell, in order), up to `cap`. A cell is free when no
+## piece, portal cell, ball or capsule is in it and the cell under it holds
+## no chrome, switch or portal (GDD 16.2.7 spawn rule). In a march the new
+## pieces join the boss's block at its current offset.
+func _spawn_cells(bi: int, cells: Array, code: String, cap: int) -> PackedInt32Array:
 	var b: Brick = bricks[bi]
-	var off: Vector2 = march_off if b.march else Vector2.ZERO
-	var row: int = floori((b.rect.end.y - off.y - NbBalance.GRID_Y) / NbBalance.CELL_H) + 1
-	if row >= NbBalance.GRID_ROWS:
-		return
-	var col: int = floori((b.rect.position.x - off.x - NbBalance.GRID_X) / NbBalance.CELL_W)
+	var off: Vector2 = blocks[b.block].off if b.block >= 0 else Vector2.ZERO
+	var base: Vector2 = b.rect.position - off
+	var r0: int = roundi((base.y - _cell_origin(0, 0).y) / NbBalance.CELL_H)
+	var c0: int = floori((base.x - NbBalance.GRID_X) / NbBalance.CELL_W)
 	var added := PackedInt32Array()
-	for c: int in range(maxi(0, col - 1), mini(NbBalance.GRID_COLS, col + 4)):
-		if added.size() >= NbBalance.BOSS_MINIONS_MAX:
+	for rc: Vector2i in cells:
+		if added.size() >= cap:
 			break
-		var home := Rect2(_cell_origin(row, c), Vector2(NbBalance.BRICK_W, NbBalance.BRICK_H))
+		var row: int = r0 + rc.x
+		var col: int = c0 + rc.y
+		if row < 0 or row >= NbBalance.GRID_ROWS or col < 0 or col >= NbBalance.GRID_COLS:
+			continue
+		var home := Rect2(_cell_origin(row, col), Vector2(NbBalance.BRICK_W, NbBalance.BRICK_H))
 		var cell := Rect2(home.position + off, home.size)
-		if not _cell_free(cell):
+		if not _cell_free(cell) or _cell_blocks_below(cell):
 			continue
 		var m := Brick.new()
 		m.row = row
-		m.col = c
-		m.code = "G"
+		m.col = col
+		m.code = code
 		m.max_hp = 1
 		m.hp = 1
 		m.minion = true
 		m.march = b.march
+		m.block = b.block
 		m.born_t = time
 		m.home = home
 		m.rect = cell
-		m.color = _minion_color
+		m.color = _ring_color if code == "N" else _minion_color
 		added.append(bricks.size())
 		bricks.append(m)
 		breakable_left += 1
 		total_breakable += 1
-	if not added.is_empty():
-		minions_added.emit(added)
-		_update_finale()
+	return added
+
+
+func _cell_blocks_below(cell: Rect2) -> bool:
+	var below := Rect2(cell.position + Vector2(0.0, NbBalance.CELL_H), cell.size)
+	for o: Brick in bricks:
+		if o.alive and not o.breakable() and o.rect.intersects(below):
+			return true
+	for p: Portal in portals:
+		if p.cell.intersects(below):
+			return true
+	return false
 
 
 func _cell_free(cell: Rect2) -> bool:
 	for o: Brick in bricks:
 		if o.alive and o.rect.intersects(cell):
+			return false
+	for p: Portal in portals:
+		if p.cell.intersects(cell):
 			return false
 	for bl: Ball in balls:
 		if _overlaps(bl.pos, cell):
@@ -952,12 +1262,140 @@ func _cell_free(cell: Rect2) -> bool:
 	return true
 
 
+## GDD 16.2.7 jump: the boss fades out over 0.3 s (still solid where it
+## is), then moves to the next anchor once no ball is in the way (at most
+## 1 s), and fades in over 0.3 s, solid at once.
+func _start_jump(i: int) -> void:
+	var spots: Array = level.get("boss", {}).get("jump", [])
+	if spots.is_empty():
+		return
+	if boss_jump_state != 0:
+		_jump_pending += 1
+		return
+	var rc: Array = spots[_jump_i % spots.size()]
+	_jump_i += 1
+	var b: Brick = bricks[i]
+	_jump_to = Rect2(_cell_origin(int(rc[0]), int(rc[1])), b.rect.size)
+	boss_jump_state = 1
+	_jump_t = 0.0
+	b.vx = 0.0
+	boss_jump_started.emit(i, b.center(), _jump_to.get_center())
+
+
+func _tick_jump(delta: float) -> void:
+	if boss_jump_state == 0 or boss_index < 0:
+		return
+	var b: Brick = bricks[boss_index]
+	if not b.alive:
+		boss_jump_state = 0
+		return
+	_jump_t += delta
+	if boss_jump_state == 1 and _jump_t >= NbBalance.BOSS_JUMP_FADE_S:
+		boss_jump_state = 2
+	if boss_jump_state != 2:
+		return
+	var blocked: bool = false
+	for bl: Ball in balls:
+		blocked = blocked or _overlaps(bl.pos, _jump_to)
+	var waited: float = _jump_t - NbBalance.BOSS_JUMP_FADE_S
+	if blocked and waited < NbBalance.BOSS_JUMP_WAIT_MAX_S:
+		return
+	b.rect = _jump_to
+	boss_jump_state = 0
+	_land_t = time
+	boss_jump_landed.emit(boss_index)
+	if _jump_pending > 0:
+		_jump_pending -= 1
+		_start_jump(boss_index)
+
+
+# ---------------------------------------------------------------- switch + ghost
+
+
+func _switch_touched(i: int) -> void:
+	if ghosts_locked or not has_ghosts:
+		return
+	if _flip_clock_on and time - _flip_t < NbBalance.SWITCH_COOLDOWN_S:
+		return
+	switch_hit.emit(i)
+	_set_ghosts(not ghost_a_solid, false)
+
+
+## Flips (or sets) the solid ghost set. A ghost that turns solid on top of a
+## ball breaks at once as a normal break (GDD 16.2.1). Restarts the clock.
+func _set_ghosts(a_solid: bool, auto: bool) -> void:
+	_flip_t = time
+	_flip_clock_on = true
+	_warned = false
+	if a_solid == ghost_a_solid:
+		return
+	ghost_a_solid = a_solid
+	flips += 1
+	ghosts_flipped.emit(ghost_a_solid, auto)
+	_break_ghosts_on_balls()
+
+
+func _break_ghosts_on_balls() -> void:
+	for i: int in bricks.size():
+		var b: Brick = bricks[i]
+		if b.ghost == 0 or not solid(b):
+			continue
+		for bl: Ball in balls:
+			if _overlaps(bl.pos, b.rect):
+				_damage(i, b.hp, false)
+				break
+		if state != State.PLAY:
+			return
+
+
+func _flip_wait() -> float:
+	for b: Brick in bricks:
+		if b.breakable() and solid(b):
+			return NbBalance.GHOST_FLIP_S
+	return NbBalance.GHOST_FLIP_PHASED_S
+
+
+## Auto flip every 7 s without a flip (3 s when only phased ghosts are
+## left), with a warning 1 s before.
+func _tick_ghosts() -> void:
+	if not has_ghosts or ghosts_locked or not _flip_clock_on:
+		return
+	var left: float = _flip_t + _flip_wait() - time
+	if not _warned and left <= NbBalance.GHOST_WARN_S:
+		_warned = true
+		ghost_warned.emit(not ghost_a_solid)
+	if left <= 0.0:
+		_set_ghosts(not ghost_a_solid, true)
+
+
+## Finale: every ghost left becomes solid for the rest of the level,
+## switches go dark, the clock stops.
+func _lock_ghosts() -> void:
+	if ghosts_locked or not has_ghosts:
+		return
+	ghosts_locked = true
+	ghosts_flipped.emit(ghost_a_solid, false)
+	_break_ghosts_on_balls()
+
+
+# ---------------------------------------------------------------- saktetid
+
+
+func _tick_slow(delta: float) -> void:
+	if slow_t <= 0.0:
+		return
+	slow_t -= delta
+	if slow_t <= 0.0:
+		slow_t = 0.0
+		slow_changed.emit(false)
+
+
 # ---------------------------------------------------------------- movers
 
 
 func _move_movers(delta: float) -> void:
-	if march_on:
-		_move_march(delta)
+	for k: int in blocks.size():
+		_move_march(k, delta)
 	for i: int in bricks.size():
 		var b: Brick = bricks[i]
 		if not b.alive or b.march or b.vx == 0.0:
@@ -969,8 +1407,9 @@ func _move_movers(delta: float) -> void:
 			b.vx = -b.vx
 
 
-## Gliders and the gliding boss reverse at the walls and at any piece in
-## front of them (only pieces ahead count, so an overlap never jitters).
+## Gliders and the gliding boss reverse at the walls, at any piece in front
+## of them (ghosts in either state count) and at portal cells (only what is
+## ahead counts, so an overlap never jitters).
 func _mover_blocked(i: int, dir: int) -> bool:
 	var b: Brick = bricks[i]
 	var gap: float = NbBalance.MOVER_WALL_GAP
@@ -985,26 +1424,30 @@ func _mover_blocked(i: int, dir: int) -> bool:
 		var o: Brick = bricks[j]
 		if o.alive and o.rect.intersects(b.rect) and (o.center().x - cx) * dir > 0.0:
 			return true
+	for p: Portal in portals:
+		if p.cell.intersects(b.rect) and (p.pos.x - cx) * dir > 0.0:
+			return true
 	return false
 
 
-## GDD 15.3.7: the block slides, reverses when its outermost ALIVE piece
-## reaches x 44 / 1036 and then steps down 26 px over 0.25 s unless that
-## would pass floor_y. Builder addition: it also reverses at, and never steps
-## onto, a piece outside the block (chrome bumpers, gliders, low rows), so
-## pieces never overlap.
-func _move_march(delta: float) -> void:
+## GDD 15.3.7 / 16.2.6: each block slides, reverses when its outermost ALIVE
+## piece reaches x 44 / 1036 or its next move would overlap a piece outside
+## the block (the other block, a switch, a ghost, a glider, a portal cell),
+## and then steps down 26 px over 0.25 s unless that passes its floor_y or
+## would overlap such a piece.
+func _move_march(k: int, delta: float) -> void:
+	var blk: MarchBlock = blocks[k]
 	var lo: float = INF
 	var hi: float = -INF
 	var low: float = -INF
 	for b: Brick in bricks:
-		if b.alive and b.march:
-			lo = minf(lo, b.home.position.x + march_off.x)
-			hi = maxf(hi, b.home.end.x + march_off.x)
-			low = maxf(low, b.home.end.y + march_off.y)
+		if b.alive and b.block == k:
+			lo = minf(lo, b.home.position.x + blk.off.x)
+			hi = maxf(hi, b.home.end.x + blk.off.x)
+			low = maxf(low, b.home.end.y + blk.off.y)
 	if lo == INF:
 		return
-	var dx: float = float(march_dir) * NbBalance.march_speed(easy) * delta
+	var dx: float = float(blk.dir) * NbBalance.march_speed(easy) * delta
 	var reverse: bool = false
 	var gap: float = NbBalance.MARCH_WALL_GAP
 	if lo + dx < NbBalance.FIELD_LEFT + gap:
@@ -1013,60 +1456,83 @@ func _move_march(delta: float) -> void:
 	elif hi + dx > NbBalance.FIELD_RIGHT - gap:
 		dx = NbBalance.FIELD_RIGHT - gap - hi
 		reverse = true
-	elif _march_hits_other(Vector2(dx, 0.0)):
+	elif _march_hits_other(k, Vector2(dx, 0.0)):
 		dx = 0.0
 		reverse = true
-	march_off.x += dx
-	if _march_drop_left > 0.0:
+	blk.off.x += dx
+	if blk.drop_left > 0.0:
 		var dy: float = minf(
-			_march_drop_left, NbBalance.MARCH_STEP_PX / NbBalance.MARCH_STEP_S * delta
+			blk.drop_left, NbBalance.MARCH_STEP_PX / NbBalance.MARCH_STEP_S * delta
 		)
-		march_off.y += dy
-		_march_drop_left -= dy
+		blk.off.y += dy
+		blk.drop_left -= dy
 	if reverse:
-		march_dir = -march_dir
+		blk.dir = -blk.dir
 		if (
-			_march_drop_left <= 0.0
-			and low + NbBalance.MARCH_STEP_PX <= march_floor
-			and not _march_hits_other(Vector2(0.0, NbBalance.MARCH_STEP_PX))
+			blk.drop_left <= 0.0
+			and low + NbBalance.MARCH_STEP_PX <= blk.floor_y
+			and not _march_hits_other(k, Vector2(0.0, NbBalance.MARCH_STEP_PX))
 		):
-			_march_drop_left = NbBalance.MARCH_STEP_PX
-			march_stepped.emit(march_dir)
+			blk.drop_left = NbBalance.MARCH_STEP_PX
+			march_stepped.emit(k)
 	for b: Brick in bricks:
-		if b.march:
-			b.rect.position = b.home.position + march_off
+		if b.block == k:
+			b.rect.position = b.home.position + blk.off
 
 
-func _march_hits_other(d: Vector2) -> bool:
+func _march_hits_other(k: int, d: Vector2) -> bool:
+	var off: Vector2 = blocks[k].off + d
 	for m: Brick in bricks:
-		if not m.alive or not m.march:
+		if not m.alive or m.block != k:
 			continue
-		var r := Rect2(m.home.position + march_off + d, m.home.size)
+		var r := Rect2(m.home.position + off, m.home.size)
 		for o: Brick in bricks:
-			if o.alive and not o.march and r.intersects(o.rect):
+			if o.alive and o.block != k and r.intersects(o.rect):
+				return true
+		for p: Portal in portals:
+			if r.intersects(p.cell):
 				return true
 	return false
+
+
+## Lean direction of a march piece's block (renderer), 0 = not marching.
+func lean_dir(b: Brick) -> int:
+	return blocks[b.block].dir if b.block >= 0 else 0
 
 
 # ---------------------------------------------------------------- aim
 
 
-## GDD 15.3.4: nearest alive breakable piece whose centre the ball can reach
-## in a straight line (only non-breakable pieces block), else a one-wall bank
-## shot (aims at the mirrored centre), else INF. Sets aim_index.
+## GDD 15.3.4: nearest alive SOLID breakable piece whose centre the ball can
+## reach in a straight line (chrome, switches and portal circles block;
+## breakable pieces never do), else a one-wall bank shot (aims at the
+## mirrored centre), else INF. Only phased ghosts left: aims under the
+## nearest switch it can see (GDD 4.4 rule 5). Sets aim_index.
 func aim_point(from: Vector2, direct_only: bool) -> Vector2:
 	aim_index = -1
 	var order: Array[Vector2] = []
+	var switches: Array[Vector2] = []
 	var blockers: Array[Rect2] = []
 	for i: int in bricks.size():
 		var b: Brick = bricks[i]
 		if not b.alive:
 			continue
 		if b.breakable():
-			order.append(Vector2(from.distance_squared_to(b.center()), float(i)))
+			if solid(b):
+				order.append(Vector2(from.distance_squared_to(b.center()), float(i)))
 		else:
 			blockers.append(b.rect)
+			if b.code == "S":
+				switches.append(Vector2(from.distance_squared_to(b.center()), float(i)))
 	order.sort()
+	if order.is_empty() and not switches.is_empty():
+		switches.sort()
+		for o: Vector2 in switches:
+			var sb: Brick = bricks[int(o.y)]
+			var under := Vector2(sb.center().x, sb.rect.end.y + NbBalance.BALL_RADIUS)
+			if _clear_path(from, under, blockers):
+				aim_index = int(o.y)
+				return under
 	for o: Vector2 in order:
 		var c: Vector2 = bricks[int(o.y)].center()
 		if _clear_path(from, c, blockers):
@@ -1092,13 +1558,17 @@ func aim_point(from: Vector2, direct_only: bool) -> Vector2:
 
 
 func _clear_path(a: Vector2, b: Vector2, blockers: Array[Rect2]) -> bool:
-	if blockers.is_empty():
+	if blockers.is_empty() and portals.is_empty():
 		return true
+	var pr2: float = NbBalance.PORTAL_LOS_RADIUS * NbBalance.PORTAL_LOS_RADIUS
 	var n: int = maxi(1, int(a.distance_to(b) / NbBalance.AIM_LOS_STEP_PX))
 	for k: int in range(1, n + 1):
 		var p: Vector2 = a.lerp(b, float(k) / float(n))
 		for rect: Rect2 in blockers:
 			if _overlaps(p, rect):
+				return false
+		for pt: Portal in portals:
+			if p.distance_squared_to(pt.pos) < pr2:
 				return false
 	return true
 
@@ -1115,6 +1585,7 @@ func _update_finale() -> void:
 		finale_on = true
 		_home_retarget_t = time
 		finale_started.emit()
+		_lock_ghosts()
 	elif not want:
 		finale_on = false
 
@@ -1217,6 +1688,10 @@ func _spawn_capsule(at: Vector2, kind: String, bonus: bool) -> Capsule:
 			alive += 1
 	if alive >= NbBalance.CAPSULE_MAX:
 		return null
+	# GDD 16.2.4: Skjoldnett is resolved at spawn; with an unlimited net it
+	# is a Bredvinge capsule.
+	if kind == "skjoldnett" and (easy or net_unlimited):
+		kind = "bredvinge"
 	var c := Capsule.new()
 	c.pos = at
 	c.kind = kind
@@ -1279,6 +1754,16 @@ func _apply_powerup(kind: String) -> void:
 			if pulse_left <= 0:
 				_pulse_next_t = time
 			pulse_left = NbBalance.NEONPULS_WAVES
+		"saktetid":
+			if slow_t <= 0.0:
+				slow_changed.emit(true)
+			slow_t = NbBalance.SAKTETID_S
+		"skjoldnett":
+			if not net_unlimited and net_charges < NbBalance.SKJOLDNETT_MAX_CHARGES:
+				net_charges += 1
+				shield_added.emit(net_charges)
+			else:
+				_apply_powerup("bredvinge")
 
 
 ## Ekko: two echo balls split from the main ball at -20 / +20 degrees and

@@ -206,6 +206,43 @@ const NEONPULS_WAVES: int = 6
 const NEONPULS_INTERVAL_S: float = 1.0
 const PULSE_FX_S: float = 0.3
 
+# --- Worlds 4-6 (GDD 16.3) ---
+const SWITCH_COOLDOWN_S: float = 0.5
+const GHOST_FLIP_S: float = 7.0
+const GHOST_FLIP_PHASED_S: float = 3.0
+const GHOST_WARN_S: float = 1.0
+const GHOST_WARN_PULSES: int = 2
+const GHOST_FADE_S: float = 0.2
+const GHOST_PHASED_ALPHA: float = 0.3
+const SWITCH_POP_S: float = 0.12
+
+const SAKTETID_S: float = 10.0
+const SAKTETID_SCALE_LETT: float = 0.75
+const SAKTETID_SCALE_VANLIG: float = 0.65
+const SAKTETID_RETURN_S: float = 0.5
+const SAKTETID_PITCH_LETT: float = 0.9
+const SAKTETID_PITCH_VANLIG: float = 0.85
+const SAKTETID_NOTCHES: int = 5
+
+const PORTAL_RADIUS: float = 40.0
+const PORTAL_EXIT_PX: float = 60.0
+const PORTAL_COOLDOWN_S: float = 0.4
+const PORTAL_MAX_HOPS: int = 3
+const PORTAL_LOS_RADIUS: float = 62.0
+const PORTAL_POP_S: float = 0.15
+
+const SKJOLDNETT_MAX_CHARGES: int = 3
+
+const PULL_RADIUS: float = 170.0
+const PULL_TURN_DEG_S_LETT: float = 45.0
+const PULL_TURN_DEG_S_VANLIG: float = 70.0
+const PULL_MAX_ROW: int = 8
+
+const MARCH_BLOCKS_MAX: int = 2
+const NOVA_RING_MAX: int = 6
+const BOSS_JUMP_FADE_S: float = 0.3
+const BOSS_JUMP_WAIT_MAX_S: float = 1.0
+
 # --- Home guard (GDD 3.2, copies the MWM Play shell) ---
 const HOME_GUARD_S: float = 2.0
 const HOME_GUARD_MIN_S: float = 0.3
@@ -286,3 +323,15 @@ static func bredvinge_scale(easy: bool) -> float:
 
 static func bredvinge_s(easy: bool) -> float:
 	return BREDVINGE_S_LETT if easy else BREDVINGE_S_VANLIG
+
+
+static func saktetid_scale(easy: bool) -> float:
+	return SAKTETID_SCALE_LETT if easy else SAKTETID_SCALE_VANLIG
+
+
+static func saktetid_pitch(easy: bool) -> float:
+	return SAKTETID_PITCH_LETT if easy else SAKTETID_PITCH_VANLIG
+
+
+static func pull_turn_deg_s(easy: bool) -> float:
+	return PULL_TURN_DEG_S_LETT if easy else PULL_TURN_DEG_S_VANLIG

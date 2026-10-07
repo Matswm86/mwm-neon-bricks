@@ -138,11 +138,35 @@ func suggested_level() -> int:
 	return 0
 
 
+## Next level for the win card: 0 = none, -1 = the endless page (after
+## level 30, GDD 8.3); endless k goes on to k + 1.
 func next_level_after(level_id: int) -> int:
+	if level_id > NbLevels.ENDLESS_BASE:
+		return level_id + 1
 	var nxt: int = level_id + 1
 	if visible_levels().has(nxt):
 		return nxt
+	if level_id == NbLevels.count() and endless_available():
+		return -1
 	return 0
+
+
+## Endless (GDD 16.9): in the full game once world 1 (levels 1-5) is
+## cleared (open question 3 keeps this default).
+func endless_available() -> bool:
+	if not full_unlock:
+		return false
+	for id: int in range(1, NbLevels.LEVELS_PER_WORLD + 1):
+		if not is_cleared(id):
+			return false
+	return true
+
+
+## Highest endless level reached (started or unlocked by a clear).
+func mark_endless(k: int) -> void:
+	if k > endless_best:
+		endless_best = k
+		save_game()
 
 
 func save_game() -> void:

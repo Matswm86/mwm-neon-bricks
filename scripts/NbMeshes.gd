@@ -80,3 +80,9 @@ static func _coords(half: float, r: float, seg: int) -> PackedFloat32Array:
 	for k: int in range(seg - 1, -1, -1):
 		out.append(half - r * float(k) / float(seg))
 	return out
+
+
+## Drops the cached mesh (tests call it before quitting, so no resource is
+## reported as leaked at exit).
+static func clear_cache() -> void:
+	_brick_body = null
