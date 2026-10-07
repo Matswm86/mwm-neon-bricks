@@ -1,11 +1,16 @@
 extends CanvasLayer
 
 ## Phone performance readout. Register as autoload "PerfOverlay".
-## Hidden by default; a three-finger tap toggles it, so the owner can read FPS,
-## draw calls, triangles and memory on the real device.
+## Hidden by default; three fingers held for about 1 s toggle it, so the
+## owner can read FPS, draw calls, triangles and memory on the real device
+## while a child's palm or a quick three-finger tap does not (QA 2026-10-06
+## finding 6).
+
+const HOLD_S: float = 1.0
 
 var _label: Label
 var _touches: Dictionary = {}
+var _hold_t: float = -1.0
 
 
 func _ready() -> void:
@@ -26,14 +31,21 @@ func _input(event: InputEvent) -> void:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
 			_touches[touch.index] = true
-			if _touches.size() >= 3:
-				_label.visible = not _label.visible
-				_touches.clear()
+			if _touches.size() >= 3 and _hold_t < 0.0:
+				_hold_t = 0.0
 		else:
 			_touches.erase(touch.index)
+			if _touches.size() < 3:
+				_hold_t = -1.0
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _hold_t >= 0.0:
+		_hold_t += delta
+		if _hold_t >= HOLD_S:
+			_hold_t = -1.0
+			_touches.clear()
+			_label.visible = not _label.visible
 	if not _label.visible:
 		return
 	var fps := Engine.get_frames_per_second()

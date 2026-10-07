@@ -337,6 +337,8 @@ Rule 16 (no reflex demands at the easiest level) holds: in Lett a miss costs not
 
 My default: inside MWM Play, the parent area gets a row "Neon Bricks: Lett / Vanlig" and the adapter calls `set_difficulty(easy: bool)` on `enter()`. In the stand-alone build, the gear on the world map opens a small panel with Lett/Vanlig, sound, music, vibration and "Mindre bevegelse" (no gate: it is the owner's own copy). Changing difficulty takes effect from the next level start.
 
+Builder note 2026-10-07 (QA 2026-10-06 finding 4): the stand-alone panel has Lett/Vanlig, sound on/off + volume, music on/off + volume and "Mindre bevegelse". It has **no vibration row**: vibration would need the Android `VIBRATE` permission, and the game ships with no permissions. `haptics_on` stays in the save and as the shell hook `set_haptics_on()`, unused until haptics are wanted (then add the permission and the row together). The haptic column in sections 9, 15.5 and 16.10 is therefore not built.
+
 ## 11. Shell hooks (summary for the builder)
 
 - Read `Engine.get_meta(&"mwm_play_shell")`: hide own home disc, own sound button and own settings gear.

@@ -502,6 +502,9 @@ Boss events (through the limiter): hit = squash 95% 80 ms + one notch goes dark 
 ### 12.7 Bricks shown for the first time in mocks
 Triple (`brick_triple.glb`, three dots in a triangle, 1372 tris), Glider (`brick_glider.glb`, chevrons, 780), Nova (`brick_nova.glb`, 4-point star r 0.15 m emission 4, 728). They match section 7b; use them for the win-card thumbnails and the 2-segment MultiMesh copies (7e).
 
+### 12.7b Magnet `O` (builder's look, 2026-10-07; graphic-designer to confirm)
+Not specified above, so built in `shaders/brick.gdshader` (kind 8) as a shape cue: the candy brick in the row colour with the shared rim tube, a white ring (r 0.075 m) in the middle and four white chevrons pointing inward at it (left, right, top, bottom). The first hit removes the right and top chevrons and adds a dark crack. Six faint spokes in a pale tint of the row colour turn at 0.25 rev/s around the ring (static under "Mindre bevegelse"); while a ball is inside the 170 px pull radius they brighten a little (steady, no flash). The world-6 accent comes from the row ramp (violet, magenta, hotpink, sun). Carriers move the star to the right end (x 0.30 m), as on Triple and Nova.
+
 ### 12.8 GLB list added 2026-10-07 (metres, Y-up, front +Z, origin centre)
 
 | File | Size x / depth / y (m) | Tris | Material names (stable, look them up by name) |

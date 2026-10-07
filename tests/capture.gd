@@ -15,6 +15,12 @@ extends Node
 ##   action          - action pass (GDD 15): Neonrush combo, Ekko echoes, boss
 ##                     levels 5 / 10 / 15 mid-fight, world 2 and 3 levels,
 ##                     the three map pages
+##   worlds          - worlds 1-6 (GDD 16, DESIGN 11-13): one mid-play shot per
+##                     world, the three new bosses, Saktetid, portals, the
+##                     world 4-6 map pages, the endless page and an endless
+##                     level; prints the draw calls of every shot
+## A save left in the user dir from an earlier run is deleted first (the
+## "shots" phase needs a first launch).
 
 var out_dir: String = OS.get_environment("CAPTURE_DIR")
 var main: NbMain
@@ -25,6 +31,13 @@ func _ready() -> void:
 		out_dir = "user://shots"
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var phase: String = OS.get_environment("CAPTURE_PHASE")
+	if FileAccess.file_exists(NbState.SAVE_PATH):
+		print("stale save in user dir: deleted, starting as a first launch")
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(NbState.SAVE_PATH))
+		var st: NbState = NeonBricks
+		st.first_launch = true
+		st.cleared = [] as Array[int]
+		st.endless_best = 0
 	if phase == "shell":
 		Engine.set_meta(&"mwm_play_shell", true)
 		NeonBricks.set_full_unlock(false)
@@ -41,6 +54,8 @@ func _ready() -> void:
 			await _phase_shell()
 		"action":
 			await _phase_action()
+		"worlds":
+			await _phase_worlds()
 		_:
 			await _phase_shots()
 	print("CAPTURE DONE in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
@@ -51,6 +66,9 @@ func _ready() -> void:
 func _phase_shots() -> void:
 	var play: NbPlay = main.play
 	print("first launch opened screen=%s level=%d" % [main.screen, play.level_id])
+	if main.screen != "play":
+		print("FAIL first launch did not open level 1 (screen=%s)" % main.screen)
+		return
 	await _wait_s(1.6)
 	await _shot("01_level1_start")
 	# Real touch: press in the drag zone, drag right 200 px, release = launch.
@@ -358,6 +376,95 @@ func _phase_action() -> void:
 		if main.map.disc_for(id) != null:
 			ids.append(id)
 	print("map levels reachable over the pages: %s" % [ids])
+
+
+## Draw calls of the last rendered frame (the PerfOverlay number).
+func _draws() -> int:
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	return int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+
+
+func _world_shot(
+	id: int, easy: bool, until: Callable, max_s: float, shot: String, after_s: float = 0.0
+) -> void:
+	await _play_until(id, easy, until, max_s, shot, after_s)
+	var d: int = await _draws()
+	var tris: int = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	print("DRAWS %s world %d: %d draw calls, %d tris" % [shot, NbLevels.world_of(id), d, tris])
+
+
+func _phase_worlds() -> void:
+	var play: NbPlay = main.play
+	await _wait_s(1.0)
+	var mid: Callable = func() -> bool:
+		return (
+			play.sim.breakable_left <= play.sim.start_breakable - 10 and play.sim.ball_pos.y > 700.0
+		)
+	await _world_shot(4, false, mid, 60.0, "30_world1_l4")
+	await _world_shot(9, false, mid, 60.0, "31_world2_l9")
+	await _world_shot(14, false, mid, 60.0, "32_world3_l14")
+	await _world_shot(
+		18,
+		false,
+		func() -> bool: return play.sim.slow_t > 4.0 or play.sim.time > 40.0,
+		60.0,
+		"33_world4_l18_saktetid"
+	)
+	await _world_shot(
+		16,
+		false,
+		func() -> bool: return play.sim.flips >= 1 and play.sim.time > 9.0,
+		40.0,
+		"34_world4_l16_ghosts"
+	)
+	await _world_shot(
+		20,
+		false,
+		func() -> bool: return play.sim.boss_phase >= 1,
+		60.0,
+		"35_boss_l20_lastebilen",
+		0.4
+	)
+	await _world_shot(
+		22,
+		false,
+		func() -> bool: return play.sim.time > 10.0 and play.sim.ball_pos.y > 800.0,
+		40.0,
+		"36_world5_l22_portals"
+	)
+	await _world_shot(
+		25,
+		false,
+		func() -> bool: return play.sim.boss_phase >= 1 and play.sim.boss_jump_state == 0,
+		60.0,
+		"37_boss_l25_krystallhjertet",
+		0.8
+	)
+	await _world_shot(26, false, mid, 40.0, "38_world6_l26_magnets")
+	await _world_shot(
+		30,
+		false,
+		func() -> bool: return play.sim.boss_phase >= 2,
+		90.0,
+		"39_boss_l30_neonnova",
+		0.5
+	)
+	# Map pages 4-6 and the endless page (needs world 1 cleared).
+	NeonBricks.cleared = [1, 2, 3, 4, 5, 16, 21, 26] as Array[int]
+	main.open_map()
+	for w: int in [4, 5, 6]:
+		main.map.show_page(w)
+		await _wait_s(0.7)
+		await _shot("4%d_map_world%d" % [w - 4, w])
+	main.map.show_endless()
+	await _wait_s(0.7)
+	await _shot("43_map_endless")
+	print("endless page shown=%s" % main.map.is_endless_page())
+	await _world_shot(NbLevels.ENDLESS_BASE + 7, false, mid, 40.0, "44_endless_k7")
+	print("endless k7 rows: %s" % [NbLevels.get_level(NbLevels.ENDLESS_BASE + 7)["rows"]])
+	# Win card with the world 6 rim.
+	await _play_until(27, true, func() -> bool: return false, 200.0, "45_level27_wincard", 0.8)
 
 
 func _touch(pos: Vector2, pressed: bool) -> void:
