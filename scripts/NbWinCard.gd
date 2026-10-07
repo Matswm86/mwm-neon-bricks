@@ -18,6 +18,7 @@ const SHADOW := Color(0.0, 0.0, 0.0, 0.55)
 const CARD_RECT := Rect2(100, 540, 880, 910)
 
 var rows: Array = []
+var world: int = 1
 var less_motion: bool = false
 var _t: float = 0.0
 var _replay: NbDisc
@@ -49,8 +50,9 @@ func _disc(icon_name: String, c: Vector2, r: float, f: Color) -> NbDisc:
 	return d
 
 
-func show_card(level_rows: Array, has_next: bool) -> void:
+func show_card(level_rows: Array, has_next: bool, world_id: int = 1) -> void:
 	rows = level_rows
+	world = world_id
 	_next.visible = has_next
 	_t = 0.0
 	visible = true
@@ -100,4 +102,4 @@ func _draw() -> void:
 	draw_colored_polygon(pts, REWARD)
 	pts.append(pts[0])
 	draw_polyline(pts, INK, 10.0, true)
-	NbDisc.draw_level_picture(self, rows, Vector2(540, 1075), Vector2(30, 18))
+	NbDisc.draw_level_picture(self, rows, Vector2(540, 1075), Vector2(30, 18), world)

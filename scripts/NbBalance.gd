@@ -47,9 +47,6 @@ const PADDLE_CONTACT_BELOW: float = 24.0
 # --- Ball (GDD 4.2) ---
 const BALL_SPEED_MIN: float = 300.0
 const BALL_SPEED_MAX: float = 1000.0
-const RAMP_STEP: float = 0.02
-const RAMP_EVERY_S: float = 15.0
-const RAMP_CAP: float = 0.15
 const SUBSTEP_MAX_PX: float = 8.0
 
 # --- Anti-stuck (GDD 4.4) ---
@@ -97,7 +94,6 @@ const KOMET_S_VANLIG: float = 6.0
 # --- Feel (GDD 9) ---
 const MAX_FLASHES_PER_S: int = 3
 const HOLDOVER_MS: int = 300
-const NOTE_STEPS_MAX: int = 8
 const SLOWMO_SCALE: float = 0.25
 const SLOWMO_S: float = 0.6
 const SLOWMO_RETURN_S: float = 0.3
@@ -126,6 +122,89 @@ const SHARDS: int = 24
 const SHARD_LIFE_S: float = 0.5
 const PARTICLE_POOL: int = 8
 const PUFF_S: float = 0.2
+
+# --- Action pass v2 (GDD 15.4) ---
+const COMBO_WINDOW_S_LETT: float = 3.0
+const COMBO_WINDOW_S_VANLIG: float = 2.0
+const COMBO_DROP_EVERY_LETT: int = 6
+const COMBO_DROP_EVERY_VANLIG: int = 8
+const COMBO_TIER_WARM: int = 5
+const COMBO_TIER_RUSH: int = 10
+const COMBO_SEGMENTS: int = 10
+const COMBO_METER_RECT: Rect2 = Rect2(290, 248, 750, 24)
+const COMBO_DRAIN_S: float = 0.3
+const COMBO_POP_S: float = 0.08
+const COMBO_POP_SCALE: float = 1.15
+const NOTE_STEPS_MAX: int = 12
+const SHARDS_WARM: int = 32
+const SHARDS_RUSH: int = 40
+const TRAIL_WARM_SCALE: float = 1.5
+const RUSH_SHAKE_PX: float = 3.0
+const RUSH_SHAKE_S: float = 0.06
+const RUSH_SHAKE_MAX_PER_S: int = 3
+const RUSH_RIM_FADE_S: float = 0.5
+const CHAIN_SLOWMO_BREAKS: int = 4
+const CHAIN_SLOWMO_WINDOW_S: float = 0.4
+const CHAIN_SLOWMO_SCALE: float = 0.5
+const CHAIN_SLOWMO_S: float = 0.25
+const CHAIN_SLOWMO_RETURN_S: float = 0.15
+const CHAIN_SLOWMO_COOLDOWN_S: float = 3.0
+
+const RAMP_PROGRESS_LETT: float = 0.0
+const RAMP_PROGRESS_VANLIG: float = 0.15
+
+const FINALE_LEFT_LETT: int = 4
+const FINALE_LEFT_VANLIG: int = 3
+const FINALE_MIN_START: int = 10
+const FINALE_TURN_DEG_S_LETT: float = 40.0
+const FINALE_TURN_DEG_S_VANLIG: float = 30.0
+const FINALE_RETARGET_S: float = 0.25
+const FINALE_PULSE_HZ: float = 1.0
+const AIM_LOS_STEP_PX: float = 10.0
+
+const NOVA_BLAST_W: float = 300.0
+const NOVA_BLAST_H: float = 156.0
+const NOVA_DELAY_S: float = 0.15
+const NOVA_CHAIN_DELAY_S: float = 0.35
+const NOVA_SHAKE_PX: float = 6.0
+const NOVA_SHAKE_S: float = 0.18
+
+const GLIDER_SPEED_LETT: float = 80.0
+const GLIDER_SPEED_VANLIG: float = 120.0
+const MOVER_WALL_GAP: float = 4.0
+
+const MARCH_SPEED_LETT: float = 40.0
+const MARCH_SPEED_VANLIG: float = 70.0
+const MARCH_STEP_PX: float = 26.0
+const MARCH_STEP_S: float = 0.25
+const MARCH_WALL_GAP: float = 4.0
+const MARCH_FLOOR_MAX_Y: float = 1000.0
+const MARCH_LEAN_DEG: float = 3.0
+
+const BOSS_W: float = 292.0
+const BOSS_H: float = 96.0
+const BOSS_PHASE_SPEEDUP: float = 1.25
+const BOSS_MINIONS_MAX: int = 4
+const BOSS_MINION_FADE_S: float = 0.3
+const BOSS_KOMET_DAMAGE: int = 2
+const BOSS_ROAR_S: float = 0.6
+const BOSS_DEATH_BURSTS: int = 3
+const BOSS_DEATH_STAGGER_S: float = 0.15
+const BOSS_SQUASH: float = 0.95
+
+const EKKO_BALLS: int = 2
+const EKKO_SPLIT_DEG: float = 20.0
+const EKKO_LIFE_S: float = 10.0
+const EKKO_MIN_UP: float = 0.3
+const BALLS_MAX: int = 3
+const BREDVINGE_SCALE_LETT: float = 1.3
+const BREDVINGE_SCALE_VANLIG: float = 1.5
+const BREDVINGE_S_LETT: float = 20.0
+const BREDVINGE_S_VANLIG: float = 15.0
+const BREDVINGE_GROW_S: float = 0.3
+const NEONPULS_WAVES: int = 6
+const NEONPULS_INTERVAL_S: float = 1.0
+const PULSE_FX_S: float = 0.3
 
 # --- Home guard (GDD 3.2, copies the MWM Play shell) ---
 const HOME_GUARD_S: float = 2.0
@@ -171,3 +250,39 @@ static func komet_bricks(easy: bool) -> int:
 
 static func komet_s(easy: bool) -> float:
 	return KOMET_S_LETT if easy else KOMET_S_VANLIG
+
+
+static func combo_window_s(easy: bool) -> float:
+	return COMBO_WINDOW_S_LETT if easy else COMBO_WINDOW_S_VANLIG
+
+
+static func combo_drop_every(easy: bool) -> int:
+	return COMBO_DROP_EVERY_LETT if easy else COMBO_DROP_EVERY_VANLIG
+
+
+static func ramp_progress(easy: bool) -> float:
+	return RAMP_PROGRESS_LETT if easy else RAMP_PROGRESS_VANLIG
+
+
+static func finale_left(easy: bool) -> int:
+	return FINALE_LEFT_LETT if easy else FINALE_LEFT_VANLIG
+
+
+static func finale_turn_deg_s(easy: bool) -> float:
+	return FINALE_TURN_DEG_S_LETT if easy else FINALE_TURN_DEG_S_VANLIG
+
+
+static func glider_speed(easy: bool) -> float:
+	return GLIDER_SPEED_LETT if easy else GLIDER_SPEED_VANLIG
+
+
+static func march_speed(easy: bool) -> float:
+	return MARCH_SPEED_LETT if easy else MARCH_SPEED_VANLIG
+
+
+static func bredvinge_scale(easy: bool) -> float:
+	return BREDVINGE_SCALE_LETT if easy else BREDVINGE_SCALE_VANLIG
+
+
+static func bredvinge_s(easy: bool) -> float:
+	return BREDVINGE_S_LETT if easy else BREDVINGE_S_VANLIG

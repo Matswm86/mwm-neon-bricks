@@ -1,7 +1,7 @@
 class_name NbMain
 extends Node
 
-## Root of MWM Neon Bricks: the 3D world, the UI layer, the world 1 map and
+## Root of MWM Neon Bricks: the 3D world, the UI layer, the world map and
 ## the play controller. First ever launch opens level 1 directly (GDD 8.2);
 ## later launches open the map. Inside MWM Play (Engine meta
 ## "mwm_play_shell") the own home disc, gear and back handling are left to
@@ -13,6 +13,8 @@ const HOME_HIT: float = 216.0
 ## Test hook: a fake top safe-area inset in window px; < 0 = ask the display.
 var fake_safe_top: float = -1.0
 var screen: String = ""
+## Last level opened this session (the map returns to its world page).
+var last_level: int = 0
 
 var world: NbWorld
 var sfx: NbSfx
@@ -51,6 +53,7 @@ func _ready() -> void:
 	center_frame.add_child(map)
 	map.level_chosen.connect(open_level)
 	map.settings_pressed.connect(_open_settings)
+	map.world_changed.connect(func(w: int) -> void: world.set_world(w))
 	play = NbPlay.new()
 	add_child(play)
 	play.setup(world, sfx, field_frame, center_frame, screen_root)
@@ -144,6 +147,7 @@ func safe_top_inset() -> float:
 
 func open_level(id: int) -> void:
 	screen = "play"
+	last_level = id
 	settings.visible = false
 	map.visible = false
 	play.start_level(id)
@@ -156,7 +160,7 @@ func open_map() -> void:
 	world.show_gameplay(false)
 	world.start_intro()
 	music.play_map()
-	map.refresh()
+	map.open_for(last_level)
 	map.visible = true
 	settings.visible = false
 	NbDisc.block_input(NbBalance.HOLDOVER_MS)

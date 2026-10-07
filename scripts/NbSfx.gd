@@ -14,9 +14,9 @@ signal stinger_started(seconds: float)
 
 const POOL: int = 12
 const DIR := "res://assets/sfx/"
-## Pentatonic steps for brick breaks (one step up per brick since the last
-## paddle touch).
-const PENTA: Array[float] = [1.0, 1.125, 1.25, 1.5, 1.667, 2.0, 2.25, 2.5, 3.0]
+## Pentatonic steps for brick breaks: step = combo - 1, 12 steps (GDD
+## 15.3.1), two and a half octaves.
+const PENTA: Array[float] = [1.0, 1.125, 1.25, 1.5, 1.667, 2.0, 2.25, 2.5, 3.0, 3.333, 4.0, 4.5]
 ## Call-site name -> files (variants) and the random pitch spread (+- share).
 const SOUNDS: Dictionary = {
 	"bop": [["nb_bop_1", "nb_bop_2", "nb_bop_3"], 0.03],
@@ -78,7 +78,7 @@ func play(name: String, pitch: float = 1.0, vol_db: float = 0.0) -> void:
 	var p: AudioStreamPlayer = _players[_next]
 	_next = (_next + 1) % _players.size()
 	p.stream = list[_rng.randi() % list.size()]
-	p.pitch_scale = clampf(pitch * (1.0 + _rng.randf_range(-spread, spread)), 0.25, 4.0)
+	p.pitch_scale = clampf(pitch * (1.0 + _rng.randf_range(-spread, spread)), 0.25, 4.6)
 	p.volume_db = vol_db + BASE_DB + linear_to_db(volume)
 	p.play()
 	if name == "win":

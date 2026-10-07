@@ -11,6 +11,7 @@ const REWARD := Color(1.000, 0.788, 0.235)
 
 var level_id: int = 1
 var rows: Array = []
+var world: int = 1
 var cleared: bool = false
 var suggested: bool = false
 var _pulse_t: float = 0.0
@@ -38,7 +39,7 @@ func _draw() -> void:
 	if suggested:
 		a = 0.8 + 0.2 * sin(_pulse_t * TAU)
 	draw_arc(c, r - 3.0, 0.0, TAU, 64, Color(CYAN.r, CYAN.g, CYAN.b, a), 6.0, true)
-	NbDisc.draw_level_picture(self, rows, c, Vector2(14, 10) * k)
+	NbDisc.draw_level_picture(self, rows, c, Vector2(14, 10) * k, world)
 	if cleared:
 		var sc: Vector2 = c + Vector2(r * 0.72, -r * 0.72)
 		var pts: PackedVector2Array = NbDisc.star_points(sc, 40.0, 19.0)

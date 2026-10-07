@@ -179,9 +179,12 @@ static func star_points(c: Vector2, outer: float, inner: float) -> PackedVector2
 	return pts
 
 
-## Mini picture of a level's bricks (map discs and the win card).
-static func draw_level_picture(ci: CanvasItem, rows: Array, centre: Vector2, cell: Vector2) -> void:
-	var colors: Dictionary = NbLevels.row_colors(rows)
+## Mini picture of a level's bricks (map discs and the win card). The boss
+## (K + its body cells) is drawn as one slab with a core ring.
+static func draw_level_picture(
+	ci: CanvasItem, rows: Array, centre: Vector2, cell: Vector2, world: int = 1
+) -> void:
+	var colors: Dictionary = NbLevels.row_colors(rows, world)
 	var first: int = 99
 	var last: int = -1
 	for r: int in rows.size():
@@ -196,9 +199,18 @@ static func draw_level_picture(ci: CanvasItem, rows: Array, centre: Vector2, cel
 		var s: String = rows[r]
 		for c: int in s.length():
 			var ch: String = s[c]
-			if ch == ".":
+			if ch == "." or ch == "+":
 				continue
 			var col: Color = NbLevels.cell_color(ch.to_upper(), colors.get(r, WHITE))
+			if ch == "K":
+				var br := Rect2(
+					origin + Vector2(cell.x * c, cell.y * (r - first)) + cell * 0.08,
+					Vector2(cell.x * 3.0, cell.y * 2.0) - cell * 0.16
+				)
+				ci.draw_rect(br, col)
+				ci.draw_rect(br, INK, false, maxf(1.0, cell.x * 0.08))
+				ci.draw_arc(br.get_center(), cell.y * 0.55, 0.0, TAU, 24, INK, cell.x * 0.12)
+				continue
 			var rect := Rect2(
 				origin + Vector2(cell.x * c, cell.y * (r - first)) + cell * 0.08, cell * 0.84
 			)

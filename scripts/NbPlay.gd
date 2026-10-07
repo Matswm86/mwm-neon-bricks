@@ -3,10 +3,14 @@ extends Node
 
 ## One level in play: owns the NbSim, reads touches (relative drag in the
 ## drag zone, launch on release), feeds sim events to NbWorld, NbSfx and the
-## flash limiter, runs slow-mo on the last brick and shows the win card.
+## flash limiter (every glow spike goes through it, GDD 15.3.1), runs the
+## chain and last-brick slow-mo, the combo meter and shows the win card.
 
 signal map_requested
 signal level_started(id: int)
+
+## Test bot: hold the paddle still this close above it (see bot_target).
+const BOT_HOLD_PX: float = 120.0
 
 ## Test hooks (capture bot / headless tests only).
 var autopilot: bool = false
@@ -21,6 +25,7 @@ var paused: bool = false
 
 var win_card: NbWinCard
 var hand: NbHandHint
+var meter: NbComboMeter
 var dim_rect: ColorRect
 var resume_disc: NbDisc
 
@@ -31,6 +36,13 @@ var _last_us: int = 0
 var _clock_s: float = 0.0
 var _level_t: float = 0.0
 var _slowmo_t: float = -1.0
+var _chain_t: float = -1.0
+## Real-clock times of the last Neonrush shakes (at most 3 per second).
+var _shake_times: Array[float] = []
+## Delayed sounds: [real clock time, name, pitch, db].
+var _pending_sfx: Array = []
+## Delayed boss death bursts: [real clock time, pos, colour].
+var _pending_bursts: Array = []
 var _card_t: float = -1.0
 var _card_shown: bool = false
 var _holdover_until_ms: int = 0
@@ -49,6 +61,8 @@ func setup(
 	hand.size = Vector2(NbBalance.DESIGN_W, NbBalance.DESIGN_H)
 	hand.visible = false
 	field_frame.add_child(hand)
+	meter = NbComboMeter.new()
+	field_frame.add_child(meter)
 	dim_rect = ColorRect.new()
 	dim_rect.color = Color(0, 0, 0, 0)
 	dim_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -79,8 +93,12 @@ func start_level(id: int) -> void:
 	sim.setup(NbLevels.get_level(id), NeonBricks.easy, force_charged_net)
 	_connect_sim()
 	world.show_gameplay(true)
+	world.set_world(NbLevels.world_of(id))
 	world.bind_level(sim)
 	world.set_less_motion(NeonBricks.less_motion)
+	meter.less_motion = NeonBricks.less_motion
+	meter.reset()
+	meter.visible = true
 	world.start_intro()
 	win_card.less_motion = NeonBricks.less_motion
 	win_card.hide_card()
@@ -88,6 +106,10 @@ func start_level(id: int) -> void:
 	dim_rect.color = Color(0, 0, 0, 0)
 	Engine.time_scale = 1.0
 	_slowmo_t = -1.0
+	_chain_t = -1.0
+	_shake_times.clear()
+	_pending_sfx.clear()
+	_pending_bursts.clear()
 	_card_t = -1.0
 	_card_shown = false
 	_pointer = -1
@@ -110,6 +132,7 @@ func stop() -> void:
 	set_process(false)
 	Engine.time_scale = 1.0
 	hand.visible = false
+	meter.visible = false
 	win_card.hide_card()
 	resume_disc.visible = false
 	dim_rect.color = Color(0, 0, 0, 0)
@@ -133,6 +156,18 @@ func _connect_sim() -> void:
 	sim.restart_started.connect(func() -> void: sfx.play("whoosh", 1.0, -4.0))
 	sim.bricks_restored.connect(func(idx: PackedInt32Array) -> void: world.fx_restored(idx))
 	sim.level_cleared.connect(_on_cleared)
+	sim.combo_stepped.connect(_on_combo_step)
+	sim.combo_dropped.connect(func(_c: int) -> void: meter.drop())
+	sim.capsule_spawned.connect(_on_capsule_spawned)
+	sim.chain_burst.connect(_on_chain_burst)
+	sim.nova_blasted.connect(_on_nova)
+	sim.echo_split.connect(_on_echo_split)
+	sim.boss_hit.connect(_on_boss_hit)
+	sim.boss_phase_changed.connect(_on_boss_phase)
+	sim.boss_defeated.connect(_on_boss_defeated)
+	sim.march_stepped.connect(_on_march_step)
+	sim.finale_started.connect(func() -> void: sfx.play("zip", 0.7, -6.0))
+	sim.pulse_fired.connect(_on_pulse)
 
 
 # ---------------------------------------------------------------- loop
@@ -148,6 +183,7 @@ func _process(_delta: float) -> void:
 		return
 	_clock_s += real_dt
 	_slowmo(real_dt)
+	_flush_sfx()
 	var game_dt: float = real_dt * Engine.time_scale
 	if autopilot:
 		_dragged = true
@@ -157,6 +193,7 @@ func _process(_delta: float) -> void:
 		sim.step(game_dt)
 	world.sync(sim, real_dt, game_dt)
 	world.sync_camera(real_dt)
+	meter.set_combo(sim.combo)
 	dim_rect.color = Color(0, 0, 0, sim.restart_dim() * NbBalance.RESTART_DIM_LEVEL)
 	_level_t += real_dt
 	_idle_t += real_dt
@@ -169,7 +206,9 @@ func _process(_delta: float) -> void:
 
 func _slowmo(real_dt: float) -> void:
 	if _slowmo_t < 0.0:
+		_chain_slowmo(real_dt)
 		return
+	_chain_t = -1.0
 	_slowmo_t += real_dt
 	if _slowmo_t < NbBalance.SLOWMO_S:
 		Engine.time_scale = NbBalance.SLOWMO_SCALE
@@ -179,6 +218,46 @@ func _slowmo(real_dt: float) -> void:
 	else:
 		Engine.time_scale = 1.0
 		_slowmo_t = -1.0
+
+
+## Chain slow-mo (GDD 15.3.1): 0.5x for 0.25 s real time, back over 0.15 s.
+## Kept under "Mindre bevegelse"; the last-brick slow-mo always wins.
+func _chain_slowmo(real_dt: float) -> void:
+	if _chain_t < 0.0:
+		return
+	_chain_t += real_dt
+	var hold: float = NbBalance.CHAIN_SLOWMO_S
+	var back: float = NbBalance.CHAIN_SLOWMO_RETURN_S
+	if _chain_t < hold:
+		Engine.time_scale = NbBalance.CHAIN_SLOWMO_SCALE
+	elif _chain_t < hold + back:
+		Engine.time_scale = lerpf(NbBalance.CHAIN_SLOWMO_SCALE, 1.0, (_chain_t - hold) / back)
+	else:
+		Engine.time_scale = 1.0
+		_chain_t = -1.0
+
+
+func _queue_sfx(delay_s: float, name: String, pitch: float, db: float) -> void:
+	_pending_sfx.append([_clock_s + delay_s, name, pitch, db])
+
+
+func _flush_sfx() -> void:
+	var i: int = 0
+	while i < _pending_sfx.size():
+		var e: Array = _pending_sfx[i]
+		if _clock_s >= float(e[0]):
+			sfx.play(String(e[1]), float(e[2]), float(e[3]))
+			_pending_sfx.remove_at(i)
+		else:
+			i += 1
+	i = 0
+	while i < _pending_bursts.size():
+		var bu: Array = _pending_bursts[i]
+		if _clock_s >= float(bu[0]):
+			world.fx_burst(bu[1], bu[2], NbBalance.SHARDS_RUSH, _limiter.allow(_clock_s))
+			_pending_bursts.remove_at(i)
+		else:
+			i += 1
 
 
 func _update_hand() -> void:
@@ -195,11 +274,40 @@ func _update_hand() -> void:
 
 
 func _drive_autopilot() -> void:
-	var target: float = sim.ball_pos.x - _auto_off
-	# Catch a falling capsule when the ball is high and moving up.
-	if not sim.capsules.is_empty() and sim.ball_vel.y < 0.0 and sim.ball_pos.y < 900.0:
-		target = sim.capsules[0].pos.x
-	sim.set_paddle_target(target)
+	sim.set_paddle_target(NbPlay.bot_target(sim, _auto_off))
+
+
+## Paddle bot shared by the capture bot and the headless tests (same idea as
+## tools/action_sim.py): follow a falling main ball with a random contact
+## offset, else the lowest falling echo, else the lowest capsule. Like a
+## thumb, it holds still for the last BOT_HOLD_PX above the paddle once it
+## is in place, so paddle english (GDD 4.3) does not randomise every shot.
+static func bot_target(s: NbSim, off: float) -> float:
+	var main: NbSim.Ball = s.balls[0]
+	if main.vel.y > 0.0 or s.state != NbSim.State.PLAY:
+		var want: float = main.pos.x - off
+		var above: float = s.paddle_top() - (main.pos.y + NbBalance.BALL_RADIUS)
+		if (
+			main.vel.y > 0.0
+			and above < BOT_HOLD_PX
+			and absf(s.paddle_x - want) < s.paddle_half * 0.5
+		):
+			return s.paddle_x
+		return want
+	var best_y: float = -INF
+	var tx: float = main.pos.x
+	for i: int in range(1, s.balls.size()):
+		var e: NbSim.Ball = s.balls[i]
+		if e.vel.y > 0.0 and e.pos.y > best_y:
+			best_y = e.pos.y
+			tx = e.pos.x
+	if best_y > -INF:
+		return tx
+	for c: NbSim.Capsule in s.capsules:
+		if c.alive and c.pos.y > best_y:
+			best_y = c.pos.y
+			tx = c.pos.x
+	return tx
 
 
 # ---------------------------------------------------------------- input
@@ -262,8 +370,96 @@ func _on_brick_hit(i: int) -> void:
 
 func _on_brick_broken(i: int, _last: bool) -> void:
 	var spike: bool = _limiter.allow(_clock_s)
-	world.fx_brick_broken(sim, i, spike)
-	sfx.note(sim.note_step - 1)
+	var tier: int = sim.combo_tier()
+	world.fx_brick_broken(sim, i, spike, tier)
+	sfx.note(mini(sim.combo - 1, NbBalance.NOTE_STEPS_MAX - 1))
+	if tier >= 1:
+		sfx.play("bwomm", 0.55, -14.0)
+	if tier >= 2:
+		_rush_shake()
+
+
+## Neonrush shake (GDD 15.3.1, owner default Q7): 3 px for 60 ms per break,
+## Vanlig only, at most 3 per second, never under "Mindre bevegelse".
+func _rush_shake() -> void:
+	if not shake_allowed():
+		return
+	while not _shake_times.is_empty() and _clock_s - _shake_times[0] >= 1.0:
+		_shake_times.pop_front()
+	if _shake_times.size() >= NbBalance.RUSH_SHAKE_MAX_PER_S:
+		return
+	_shake_times.append(_clock_s)
+	world.fx_shake(NbBalance.RUSH_SHAKE_PX, NbBalance.RUSH_SHAKE_S)
+
+
+## Gameplay shake (Neonrush, Nova) is Vanlig only and never under "Mindre
+## bevegelse" (GDD 15.10: Lett has no shake). The last-brick shake is the
+## shipped celebration and keeps its own rule (off under less motion).
+func shake_allowed() -> bool:
+	return not NeonBricks.easy and not NeonBricks.less_motion
+
+
+func _on_combo_step(c: int, _pos: Vector2) -> void:
+	meter.set_combo(c)
+
+
+func _on_capsule_spawned(c: NbSim.Capsule) -> void:
+	if not c.bonus:
+		return
+	sfx.play("note", 1.5, -6.0)
+	_queue_sfx(0.12, "note", 2.0, -6.0)
+	world.fx_ring(c.pos, Color(1.0, 0.9, 0.6), 0.6, _limiter.allow(_clock_s))
+
+
+func _on_chain_burst() -> void:
+	if _slowmo_t < 0.0 and not _card_shown:
+		_chain_t = 0.0
+
+
+func _on_nova(pos: Vector2) -> void:
+	sfx.play("bwomm", 0.5, -2.0)
+	world.fx_ring(pos, Color(1.0, 0.95, 0.75), 1.6, _limiter.allow(_clock_s))
+	if shake_allowed():
+		world.fx_shake(NbBalance.NOVA_SHAKE_PX, NbBalance.NOVA_SHAKE_S)
+
+
+func _on_echo_split(_pos: Vector2) -> void:
+	sfx.play("bop", 1.3, -4.0)
+	_queue_sfx(0.07, "bop", 1.6, -4.0)
+	_queue_sfx(0.14, "bop", 1.9, -4.0)
+
+
+func _on_boss_hit(i: int, _pos: Vector2) -> void:
+	var b: NbSim.Brick = sim.bricks[i]
+	var lost: int = b.max_hp - maxi(b.hp, 0)
+	sfx.play("bwomm", 0.75 + 0.04 * float(lost), -2.0)
+	world.fx_boss_hit(i)
+
+
+func _on_boss_phase(i: int, _phase: int) -> void:
+	sfx.play("whoosh", 0.5, 0.0)
+	world.fx_boss_roar(i, _limiter.allow(_clock_s))
+
+
+func _on_boss_defeated(i: int, _pos: Vector2) -> void:
+	sfx.play("bwomm", 0.4, 0.0)
+	_queue_sfx(0.3, "arp", 1.0, -4.0)
+	var b: NbSim.Brick = sim.bricks[i]
+	for k: int in NbBalance.BOSS_DEATH_BURSTS:
+		var off := Vector2((float(k) - 1.0) * 90.0, 0.0)
+		_pending_bursts.append(
+			[_clock_s + NbBalance.BOSS_DEATH_STAGGER_S * k, b.center() + off, b.color]
+		)
+
+
+func _on_march_step(_dir: int) -> void:
+	sfx.play("tick", 1.25, -6.0)
+	_queue_sfx(0.14, "tick", 0.9, -6.0)
+
+
+func _on_pulse(lo: float, hi: float) -> void:
+	sfx.play("zip", 1.4, -8.0)
+	world.fx_pulse(lo, hi, _limiter.allow(_clock_s))
 
 
 func _on_net(pos: Vector2, _left: int) -> void:
@@ -271,14 +467,15 @@ func _on_net(pos: Vector2, _left: int) -> void:
 	sfx.play("bwomm")
 
 
-func _on_capsule(_kind: String, _pos: Vector2) -> void:
+func _on_capsule(kind: String, _pos: Vector2) -> void:
 	if _limiter.allow(_clock_s):
 		world.fx_touch()
-	sfx.play("arp")
+	sfx.play("arp", {"komet": 1.0, "ekko": 1.12, "bredvinge": 0.9, "neonpuls": 1.25}.get(kind, 1.0))
 
 
 func _on_cleared(pos: Vector2) -> void:
 	_slowmo_t = 0.0
+	_chain_t = -1.0
 	world.fx_last_brick(pos)
 	sfx.play("win")
 	NeonBricks.mark_cleared(level_id)
@@ -291,7 +488,7 @@ func _show_card() -> void:
 	Engine.time_scale = 1.0
 	_slowmo_t = -1.0
 	var nxt: int = NeonBricks.next_level_after(level_id)
-	win_card.show_card(NbLevels.get_level(level_id)["rows"], nxt != 0)
+	win_card.show_card(NbLevels.get_level(level_id)["rows"], nxt != 0, NbLevels.world_of(level_id))
 	NbDisc.block_input(NbBalance.HOLDOVER_MS)
 	NeonBricks.level_card_shown.emit(level_id)
 	if not NeonBricks.full_unlock and level_id == NbBalance.FREE_LEVELS:
