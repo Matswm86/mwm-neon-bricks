@@ -24,6 +24,8 @@ var _shown: float = 0.0
 var _pop_seg: int = -1
 var _pop_t: float = 99.0
 var _rush_t: float = 0.0
+## Reused edge buffer (no allocation per redraw once grown).
+var _edges := PackedVector2Array()
 
 
 func _ready() -> void:
@@ -94,9 +96,12 @@ func _draw() -> void:
 	elif _combo >= NbBalance.COMBO_TIER_WARM:
 		tier = 1
 	var lit_col: Color = TIER_COLS[tier]
+	# Grouped by primitive so the canvas batches them (QA 2026-10-07 finding
+	# 1): all fills, then all lit parts, then every edge in one multiline,
+	# then the Neonrush glow in one multiline.
+	var segs: Array[Rect2] = []
 	for i: int in n:
 		var seg := Rect2(r.position + Vector2((w + GAP) * float(i), 0.0), Vector2(w, r.size.y))
-		var lit: float = clampf(_shown - float(i), 0.0, 1.0)
 		if i == _pop_seg and _pop_t < NbBalance.COMBO_POP_S and not less_motion:
 			var k: float = _pop_t / NbBalance.COMBO_POP_S
 			var sc: float = lerpf(NbBalance.COMBO_POP_SCALE, 1.0, absf(k * 2.0 - 1.0))
@@ -106,11 +111,28 @@ func _draw() -> void:
 				w * (sc - 1.0) * 0.5,
 				r.size.y * (sc - 1.0) * 0.5
 			)
+		segs.append(seg)
 		draw_rect(seg, OFF)
+	for i: int in n:
+		var lit: float = clampf(_shown - float(i), 0.0, 1.0)
 		if lit > 0.0:
-			var part := Rect2(seg.position, Vector2(seg.size.x * lit, seg.size.y))
-			draw_rect(part, lit_col)
-		draw_rect(seg, EDGE, false, 2.0)
-		if _rush_t > 0.0:
-			var g := Color(GLOW.r, GLOW.g, GLOW.b, 0.85 * _rush_t)
-			draw_rect(seg.grow(3.0), g, false, 3.0)
+			draw_rect(
+				Rect2(segs[i].position, Vector2(segs[i].size.x * lit, segs[i].size.y)), lit_col
+			)
+	_edges.clear()
+	for seg: Rect2 in segs:
+		_add_box(_edges, seg)
+	draw_multiline(_edges, EDGE, 2.0)
+	if _rush_t > 0.0:
+		_edges.clear()
+		for seg: Rect2 in segs:
+			_add_box(_edges, seg.grow(3.0))
+		draw_multiline(_edges, Color(GLOW.r, GLOW.g, GLOW.b, 0.85 * _rush_t), 3.0)
+
+
+static func _add_box(pts: PackedVector2Array, b: Rect2) -> void:
+	var p0: Vector2 = b.position
+	var p1 := Vector2(b.end.x, b.position.y)
+	var p2: Vector2 = b.end
+	var p3 := Vector2(b.position.x, b.end.y)
+	pts.append_array(PackedVector2Array([p0, p1, p1, p2, p2, p3, p3, p0]))

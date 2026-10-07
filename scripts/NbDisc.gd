@@ -22,6 +22,11 @@ static var block_until_ms: int = 0
 ## Disc centre inside the control; negative = the middle of the rect.
 @export var disc_center: Vector2 = Vector2(-1, -1)
 
+## Idle look rendered once into a texture (one draw call instead of the
+## circle, the anti-aliased ring and the icon polygons; QA 2026-10-07
+## finding 8). Used only while the disc is idle and its layout unchanged.
+var baked: Texture2D
+var baked_key: String = ""
 var _down: bool = false
 var _press_t: float = 99.0
 
@@ -76,8 +81,48 @@ func _process(delta: float) -> void:
 		set_process(false)
 
 
+func layout_key() -> String:
+	return "%s|%s|%s|%s|%s" % [icon, size, center(), disc_radius, fill]
+
+
+## Renders the idle look of each disc once in a SubViewport and keeps the
+## image. Needs a real renderer (skipped headless).
+static func bake(host: Node, discs: Array[NbDisc]) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var vps: Array[SubViewport] = []
+	for d: NbDisc in discs:
+		var vp := SubViewport.new()
+		vp.size = Vector2i(ceili(d.size.x), ceili(d.size.y))
+		vp.transparent_bg = true
+		vp.disable_3d = true
+		vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		var c := NbDisc.new()
+		c.icon = d.icon
+		c.disc_radius = d.disc_radius
+		c.ring_px = d.ring_px
+		c.fill = d.fill
+		c.disc_center = d.center()
+		c.size = d.size
+		vp.add_child(c)
+		host.add_child(vp)
+		vps.append(vp)
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	for i: int in discs.size():
+		var img: Image = vps[i].get_texture().get_image()
+		if img and is_instance_valid(discs[i]):
+			discs[i].baked = ImageTexture.create_from_image(img)
+			discs[i].baked_key = discs[i].layout_key()
+			discs[i].queue_redraw()
+		vps[i].queue_free()
+
+
 func _draw() -> void:
 	var pressed: bool = _down or _press_t < 0.1
+	if not pressed and baked and baked_key == layout_key():
+		draw_texture(baked, Vector2.ZERO)
+		return
 	var k: float = 0.92 if pressed else 1.0
 	var c: Vector2 = center()
 	var r: float = disc_radius * k

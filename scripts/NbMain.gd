@@ -132,6 +132,7 @@ func apply_safe_area() -> void:
 	play_gear.disc_center = Vector2(HOME_HIT - 104.0, 104.0 + dy)
 	play_gear.queue_redraw()
 	map.set_safe_dy(dy, center_frame.position)
+	NbDisc.bake(self, [home, play_gear] as Array[NbDisc])
 
 
 ## Depth of the top screen cutout in viewport px (0 on desktop and on phones
